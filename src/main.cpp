@@ -1,18 +1,22 @@
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h>
 
-// Standard USB HID joystick descriptor:
+#include "channel_state.h"
+
+// -----------------------------------------------------------------------------
+// HID report descriptor
 //
-// 2 x 16-bit axes:
-//   X
-//   Y
+// Standard joystick exposing:
 //
-// 2 x 16-bit sliders
+//   X axis
+//   Y axis
+//   Slider 1
+//   Slider 2
+//   32 buttons
 //
-// 32 buttons
-//
-// Total report size:
+// Report size:
 //   2 + 2 + 2 + 2 + 4 = 12 bytes
+// -----------------------------------------------------------------------------
 
 uint8_t const desc_hid_report[] =
 {
@@ -25,9 +29,9 @@ uint8_t const desc_hid_report[] =
     // Collection (Application)
     0xA1, 0x01,
 
-        // -------------------------
-        // X and Y
-        // -------------------------
+        // ---------------------------------------------------------------------
+        // X and Y axes
+        // ---------------------------------------------------------------------
 
         // Usage (X)
         0x09, 0x30,
@@ -51,9 +55,9 @@ uint8_t const desc_hid_report[] =
         0x81, 0x02,
 
 
-        // -------------------------
+        // ---------------------------------------------------------------------
         // Two sliders
-        // -------------------------
+        // ---------------------------------------------------------------------
 
         // Usage (Slider)
         0x09, 0x36,
@@ -71,9 +75,9 @@ uint8_t const desc_hid_report[] =
         0x81, 0x02,
 
 
-        // -------------------------
+        // ---------------------------------------------------------------------
         // 32 buttons
-        // -------------------------
+        // ---------------------------------------------------------------------
 
         // Usage Page (Button)
         0x05, 0x09,
@@ -103,7 +107,14 @@ uint8_t const desc_hid_report[] =
     0xC0
 };
 
-struct __attribute__((packed)) JoystickReport
+
+// -----------------------------------------------------------------------------
+// USB report format.
+//
+// This structure must match the descriptor above exactly.
+// -----------------------------------------------------------------------------
+
+struct __attribute__((packed)) HidReport
 {
     uint16_t x;
     uint16_t y;
@@ -114,47 +125,58 @@ struct __attribute__((packed)) JoystickReport
     uint32_t buttons;
 };
 
-static_assert(sizeof(JoystickReport) == 12,
-              "JoystickReport must be exactly 12 bytes");
+static_assert(
+    sizeof(HidReport) == 12,
+    "HidReport must be exactly 12 bytes"
+);
 
-Adafruit_USBD_HID usb_hid;
 
-JoystickReport report = {};
+// -----------------------------------------------------------------------------
+// Global state
+// -----------------------------------------------------------------------------
+
+Adafruit_USBD_HID usbHid;
+
+ChannelState channelState;
+
+
+// -----------------------------------------------------------------------------
+// setup()
+// -----------------------------------------------------------------------------
 
 void setup()
 {
+    // Initialize TinyUSB if necessary.
     if (!TinyUSBDevice.isInitialized())
     {
         TinyUSBDevice.begin(0);
     }
 
-    usb_hid.setPollInterval(2);
+    // Configure HID device.
+    usbHid.setPollInterval(2);
 
-    usb_hid.setReportDescriptor(
+    usbHid.setReportDescriptor(
         desc_hid_report,
         sizeof(desc_hid_report)
     );
 
-    usb_hid.setStringDescriptor("ELRS HID Bridge");
+    usbHid.setStringDescriptor("ELRS HID Bridge");
 
-    usb_hid.begin();
+    usbHid.begin();
 
+    // Force USB re-enumeration if already attached.
     if (TinyUSBDevice.mounted())
     {
         TinyUSBDevice.detach();
         delay(10);
         TinyUSBDevice.attach();
     }
-
-    // Start everything centered.
-    report.x = 32768;
-    report.y = 32768;
-
-    report.slider1 = 32768;
-    report.slider2 = 32768;
-
-    report.buttons = 0;
 }
+
+
+// -----------------------------------------------------------------------------
+// loop()
+// -----------------------------------------------------------------------------
 
 void loop()
 {
@@ -167,9 +189,20 @@ void loop()
         return;
     }
 
-    if (usb_hid.ready())
+    if (usbHid.ready())
     {
-        usb_hid.sendReport(
+        // Convert the application's ChannelState into the USB report.
+        HidReport report;
+
+        report.x = channelState.roll;
+        report.y = channelState.pitch;
+
+        report.slider1 = channelState.throttle;
+        report.slider2 = channelState.yaw;
+
+        report.buttons = channelState.buttons;
+
+        usbHid.sendReport(
             0,
             &report,
             sizeof(report)
