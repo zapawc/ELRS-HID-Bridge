@@ -3,19 +3,39 @@
 namespace
 {
     constexpr size_t CRSF_HEADER_SIZE = 2;
-
-    // CRSF length byte includes:
-    //
-    //   Type
-    //   Payload
-    //   CRC
-    //
-    // It does NOT include:
-    //
-    //   Address
-    //   Length
-    //
     constexpr size_t CRSF_LENGTH_OFFSET = 1;
+
+    constexpr uint8_t CRSF_CRC_POLY = 0xD5;
+
+    uint8_t crc8DvbS2(
+        const uint8_t* data,
+        size_t length
+    )
+    {
+        uint8_t crc = 0;
+
+        for (size_t i = 0; i < length; ++i)
+        {
+            crc ^= data[i];
+
+            for (uint8_t bit = 0; bit < 8; ++bit)
+            {
+                if (crc & 0x80)
+                {
+                    crc =
+                        static_cast<uint8_t>(
+                            (crc << 1) ^ CRSF_CRC_POLY
+                        );
+                }
+                else
+                {
+                    crc <<= 1;
+                }
+            }
+        }
+
+        return crc;
+    }
 }
 
 void CrsfDecoder::reset()
@@ -27,7 +47,6 @@ void CrsfDecoder::reset()
 
 void CrsfDecoder::pushByte(uint8_t byte)
 {
-    // Prevent malformed data from overflowing the buffer.
     if (frameIndex >= MAX_FRAME_SIZE)
     {
         reset();
@@ -35,8 +54,6 @@ void CrsfDecoder::pushByte(uint8_t byte)
 
     frameBuffer[frameIndex++] = byte;
 
-    // Once we receive the length byte, we know how large
-    // the complete frame should be.
     if (frameIndex == CRSF_HEADER_SIZE)
     {
         const uint8_t crsfLength =
@@ -45,7 +62,17 @@ void CrsfDecoder::pushByte(uint8_t byte)
         expectedFrameSize =
             static_cast<size_t>(crsfLength) + 2;
 
-        if (expectedFrameSize > MAX_FRAME_SIZE)
+        // Smallest useful CRSF frame is:
+        //
+        // Address
+        // Length
+        // Type
+        // CRC
+        //
+        if (
+            expectedFrameSize < 4 ||
+            expectedFrameSize > MAX_FRAME_SIZE
+        )
         {
             reset();
             return;
@@ -81,5 +108,39 @@ void CrsfDecoder::clearNewChannels()
 
 void CrsfDecoder::processFrame()
 {
-    // Frame parsing will be implemented next.
+    // Frame layout:
+    //
+    // [0] Address
+    // [1] Length
+    // [2] Type
+    // ...
+    // [last] CRC
+
+    if (frameIndex < 4)
+    {
+        return;
+    }
+
+    const size_t crcIndex = frameIndex - 1;
+
+    const uint8_t receivedCrc =
+        frameBuffer[crcIndex];
+
+    // CRC covers Type + Payload.
+    //
+    // Type begins at index 2.
+    const uint8_t calculatedCrc =
+        crc8DvbS2(
+            &frameBuffer[2],
+            crcIndex - 2
+        );
+
+    if (receivedCrc != calculatedCrc)
+    {
+        return;
+    }
+
+    // Frame is structurally valid and passed CRC.
+    //
+    // RC channel decoding comes next.
 }
