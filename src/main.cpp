@@ -8,6 +8,7 @@
 #include "normalized_channels.h"
 #include "raw_channel_test.h"
 #include "raw_channels.h"
+#include "status_led.h"
 #include "usb_hid.h"
 
 RawChannels rawChannels;
@@ -18,11 +19,14 @@ RawChannelTest rawChannelTest;
 ChannelNormalizer channelNormalizer;
 ChannelMapper channelMapper;
 UsbHid usbHid;
+StatusLed statusLed;
 
 bool crsfSelfTestPassed = false;
 
 void setup()
 {
+    statusLed.begin();
+
     DebugLog::begin();
 
     usbHid.begin();
@@ -36,11 +40,19 @@ void setup()
         DebugLog::info(
             "[SELFTEST] CRSF decoder: PASS"
         );
+
+        statusLed.setStatus(
+            SystemStatus::Ready
+        );
     }
     else
     {
         DebugLog::info(
             "[SELFTEST] CRSF decoder: FAIL"
+        );
+
+        statusLed.setStatus(
+            SystemStatus::Error
         );
     }
 
