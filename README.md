@@ -1,25 +1,26 @@
 # ELRS HID Bridge
 
-## Goal
+Convert an ExpressLRS/CRSF receiver into a USB HID joystick using an Adafruit QT Py RP2040.
 
-Convert CRSF (ELRS) serial data into a USB HID joystick.
+## Status
+
+🚧 Early development
+
+Currently implemented:
+
+- USB HID joystick
+- Modular architecture
+- CRSF frame parser
+- CRC validation
+- RC channel decoder framework
 
 ## Hardware
 
 - Adafruit QT Py RP2040
-- RadioMaster RP2 V2
+- ExpressLRS CRSF Receiver
 
-## HID Layout
+## Goals
 
-- X
-- Y
-- Slider 1
-- Slider 2
-- 32 Buttons
-
-## Status
-
-☐ Environment
-☐ USB HID
-☐ CRSF
-☐ Configuration
+- Zero driver installation
+- Plug-and-play for Liftoff, VelociDrone, DRL, etc.
+- Open source
