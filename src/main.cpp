@@ -2,6 +2,7 @@
 #include <Adafruit_TinyUSB.h>
 
 #include "channel_state.h"
+#include "test_generator.h"
 
 // -----------------------------------------------------------------------------
 // HID report descriptor
@@ -109,9 +110,7 @@ uint8_t const desc_hid_report[] =
 
 
 // -----------------------------------------------------------------------------
-// USB report format.
-//
-// This structure must match the descriptor above exactly.
+// USB report format
 // -----------------------------------------------------------------------------
 
 struct __attribute__((packed)) HidReport
@@ -132,12 +131,13 @@ static_assert(
 
 
 // -----------------------------------------------------------------------------
-// Global state
+// Global objects
 // -----------------------------------------------------------------------------
 
 Adafruit_USBD_HID usbHid;
 
 ChannelState channelState;
+TestGenerator testGenerator;
 
 
 // -----------------------------------------------------------------------------
@@ -146,13 +146,11 @@ ChannelState channelState;
 
 void setup()
 {
-    // Initialize TinyUSB if necessary.
     if (!TinyUSBDevice.isInitialized())
     {
         TinyUSBDevice.begin(0);
     }
 
-    // Configure HID device.
     usbHid.setPollInterval(2);
 
     usbHid.setReportDescriptor(
@@ -164,13 +162,14 @@ void setup()
 
     usbHid.begin();
 
-    // Force USB re-enumeration if already attached.
     if (TinyUSBDevice.mounted())
     {
         TinyUSBDevice.detach();
         delay(10);
         TinyUSBDevice.attach();
     }
+
+    testGenerator.begin();
 }
 
 
@@ -184,6 +183,9 @@ void loop()
     TinyUSBDevice.task();
 #endif
 
+    // Update synthetic control values.
+    testGenerator.update(channelState);
+
     if (!TinyUSBDevice.mounted())
     {
         return;
@@ -191,7 +193,6 @@ void loop()
 
     if (usbHid.ready())
     {
-        // Convert the application's ChannelState into the USB report.
         HidReport report;
 
         report.x = channelState.roll;
