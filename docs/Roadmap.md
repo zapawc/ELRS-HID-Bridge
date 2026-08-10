@@ -1,90 +1,125 @@
 # Project Roadmap
 
-**Version:** 0.2  
-**Status:** Draft
+**Version:** 0.3  
+**Status:** Active Development
 
 ---
 
-# Version 0.1
+# Current Status
 
-## Foundation
+The project has completed the core firmware architecture and is entering hardware integration.
+
+Current focus:
+
+- UART receiver integration
+- Live CRSF decoding
+- Hardware validation
+
+---
+
+# Version 0.1 - Foundation
+
+## Completed
 
 - [x] PlatformIO project
-- [x] USB HID joystick
-- [x] Synthetic joystick testing
-- [x] Modular architecture
 - [x] GitHub repository
+- [x] USB HID joystick
+- [x] Synthetic HID test generator
 
 ---
 
-# Version 0.2
+# Version 0.2 - Architecture
 
-## Protocol Framework
+## Completed
 
-- [x] CRSF frame assembly
+- [x] Modular firmware architecture
+- [x] CRSF frame assembler
 - [x] CRC validation
 - [x] Frame dispatcher
 - [x] Raw channel abstraction
 - [x] Channel normalization
 - [x] Channel mapping
-- [x] Documentation
+- [x] Deterministic protocol self-tests
+- [x] Optional USB debug logging
+- [x] RGB status LED framework
+- [x] Project documentation
 
 ---
 
-# Version 0.3
+# Version 0.3 - Hardware Integration
 
-## CRSF Receiver
+## In Progress
 
-- [ ] RC channel decoder
-- [ ] Self-test framework
-- [ ] Synthetic CRSF frame generator
-- [ ] UART integration
-- [ ] Receiver validation
-
----
-
-# Version 0.4
-
-## Features
-
-- [ ] Link statistics
-- [ ] Optional USB serial debugging
-- [ ] Failsafe detection
-- [ ] Receiver status
+- [ ] UART driver
+- [ ] ELRS receiver integration
+- [ ] Live CRSF frame decoding
+- [ ] Receiver state machine
+- [ ] Link detection
+- [ ] Hardware validation
 
 ---
 
-# Version 0.5
+# Version 0.4 - Diagnostics
 
-## Configuration
+## Planned
+
+- [ ] Link statistics (CRSF 0x14)
+- [ ] CRC error indication
+- [ ] Receiver failsafe indication
+- [ ] Rich RGB LED status patterns
+- [ ] Runtime debug messages
+- [ ] Startup diagnostics
+
+---
+
+# Version 0.5 - Configuration
+
+## Planned
 
 - [ ] Configurable channel mapping
-- [ ] Persistent settings
+- [ ] Persistent configuration
 - [ ] Calibration
-- [ ] Boot configuration
+- [ ] Maintenance pushbutton
+- [ ] Factory reset
+- [ ] USB configuration interface
 
 ---
 
-# Version 1.0
+# Version 0.6 - Platform Expansion
 
-## Initial Release
+## Planned
+
+- [ ] SBUS support
+- [ ] iBUS support
+- [ ] Additional receiver protocols
+- [ ] Multiple HID layouts
+- [ ] Multiple joystick profiles
+
+---
+
+# Version 1.0 - Initial Release
+
+## Planned
 
 - [ ] Stable firmware
 - [ ] Complete documentation
 - [ ] Wiring guide
-- [ ] Build instructions
-- [ ] Example configurations
-- [ ] Open source release
+- [ ] Enclosure files
+- [ ] Build guide
+- [ ] Release binaries
+- [ ] Versioned releases
 
 ---
 
-## Future Ideas
+# Future Ideas
 
-Potential future enhancements include:
+Potential future enhancements:
 
-- SBUS support
-- CRSF telemetry decoding
-- Xbox/XInput support
-- Multiple HID profiles
-- Companion configuration utility
+- Bluetooth HID
+- XInput support
+- Companion desktop utility
 - Firmware update utility
+- OLED status display
+- CRSF telemetry decoding
+- Multiple receiver profiles
+- Automatic protocol detection
