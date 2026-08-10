@@ -4,9 +4,13 @@
 
 #include "channel_index.h"
 
-struct RawChannels
+struct NormalizedChannels
 {
     static constexpr uint8_t CHANNEL_COUNT = 16;
+
+    static constexpr uint16_t MIN = 0;
+    static constexpr uint16_t MID = 32768;
+    static constexpr uint16_t MAX = 65535;
 
     uint16_t channel[CHANNEL_COUNT] = {};
 

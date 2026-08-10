@@ -161,8 +161,7 @@ void CrsfDecoder::processFrame()
         return;
     }
 
-    // CRC has passed. From this point onward, CrsfFrame represents
-    // validated protocol data.
+    // From this point onward the frame has passed CRC validation.
     CrsfFrame frame;
 
     frame.address = frameBuffer[0];
@@ -177,7 +176,9 @@ void CrsfDecoder::processFrame()
     //
     // Payload Length = Length - Type - CRC
     frame.payloadLength =
-        static_cast<uint8_t>(frame.length - 2);
+        static_cast<uint8_t>(
+            frame.length - 2
+        );
 
     if (frame.payloadLength > 0)
     {
@@ -193,15 +194,27 @@ void CrsfDecoder::dispatchFrame(const CrsfFrame& frame)
     switch (frame.type)
     {
         case Crsf::FRAME_RC_CHANNELS:
-            // RC channel decoding will be implemented next.
+        {
+            if (
+                rcChannelDecoder.decode(
+                    frame,
+                    channels
+                )
+            )
+            {
+                newChannels = true;
+            }
+
             break;
+        }
 
         case Crsf::FRAME_LINK_STATISTICS:
             // Reserved for future link-statistics support.
             break;
 
         default:
-            // Unknown/unimplemented frame types are intentionally ignored.
+            // Unknown or currently unsupported frame types are
+            // intentionally ignored.
             break;
     }
 }

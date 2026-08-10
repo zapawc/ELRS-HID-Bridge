@@ -5,6 +5,7 @@
 
 #include "crsf_frame.h"
 #include "raw_channels.h"
+#include "rc_channel_decoder.h"
 
 class CrsfDecoder
 {
@@ -33,6 +34,7 @@ private:
     bool newChannels = false;
 
     RawChannels channels;
+    RcChannelDecoder rcChannelDecoder;
 
     void processFrame();
     void dispatchFrame(const CrsfFrame& frame);
