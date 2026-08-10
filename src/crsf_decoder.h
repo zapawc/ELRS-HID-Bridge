@@ -1,8 +1,9 @@
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
+#include "crsf_frame.h"
 #include "raw_channels.h"
 
 class CrsfDecoder
@@ -18,7 +19,7 @@ public:
 
     const RawChannels& getChannels() const;
 
-    // Clear the "new data" indication after consuming it.
+    // Clear the new-data indication after consuming it.
     void clearNewChannels();
 
 private:
@@ -34,4 +35,5 @@ private:
     RawChannels channels;
 
     void processFrame();
+    void dispatchFrame(const CrsfFrame& frame);
 };
