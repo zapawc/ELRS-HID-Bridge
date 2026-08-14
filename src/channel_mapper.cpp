@@ -20,8 +20,8 @@ void ChannelMapper::update(
     // HID direction corrections:
     // Roll     = normal
     // Pitch    = inverted
-    // Throttle = inverted
-    // Yaw      = inverted
+    // Throttle = normal
+    // Yaw      = normal
 
     state.roll =
         channels.get(ChannelIndex::CH1);
