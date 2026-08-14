@@ -44,20 +44,26 @@ void StatusLed::setStatus(SystemStatus status)
 
         case SystemStatus::Ready:
             // Blue:
-            // Firmware healthy, no receiver bytes seen yet.
+            // Firmware healthy, waiting for receiver activity.
             setColor(0, 0, 255);
             break;
 
         case SystemStatus::ReceiverBytes:
             // Yellow:
-            // UART activity exists, but no valid RC frame yet.
+            // UART traffic seen, but no valid RC frame yet.
             setColor(255, 180, 0);
             break;
 
         case SystemStatus::ReceiverFrames:
             // Green:
-            // Valid CRSF RC channel frames decoded.
+            // Valid live RC channel frames are being received.
             setColor(0, 255, 0);
+            break;
+
+        case SystemStatus::ReceiverLost:
+            // Purple:
+            // Valid RC frames stopped arriving.
+            setColor(180, 0, 255);
             break;
 
         case SystemStatus::Error:

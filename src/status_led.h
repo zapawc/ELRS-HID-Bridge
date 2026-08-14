@@ -6,6 +6,7 @@ enum class SystemStatus
     Ready,
     ReceiverBytes,
     ReceiverFrames,
+    ReceiverLost,
     Error
 };
 

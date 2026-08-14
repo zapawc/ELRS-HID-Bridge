@@ -26,6 +26,31 @@ CrsfDecoder crsfDecoder;
 bool crsfSelfTestPassed = false;
 bool receiverBytesSeen = false;
 bool receiverFramesSeen = false;
+bool receiverLost = false;
+
+uint32_t lastValidRcFrameMs = 0;
+
+namespace
+{
+    constexpr uint32_t RECEIVER_TIMEOUT_MS = 500;
+
+    void setFailsafeState(ChannelState& state)
+    {
+        state.roll =
+            NormalizedChannels::MID;
+
+        state.pitch =
+            NormalizedChannels::MID;
+
+        state.throttle =
+            NormalizedChannels::MIN;
+
+        state.yaw =
+            NormalizedChannels::MID;
+
+        state.buttons = 0;
+    }
+}
 
 void setup()
 {
@@ -44,6 +69,9 @@ void setup()
             SystemStatus::Error
         );
 
+        setFailsafeState(channelState);
+        usbHid.update(channelState);
+
         return;
     }
 
@@ -53,12 +81,15 @@ void setup()
 
     // Start the physical CRSF UART.
     crsfUart.begin();
+
+    // Start in a safe neutral state until the first
+    // valid live RC frame arrives.
+    setFailsafeState(channelState);
+    usbHid.update(channelState);
 }
 
 void loop()
 {
-    // If the startup protocol self-test failed, leave the
-    // system in its error state and do not process receiver data.
     if (!crsfSelfTestPassed)
     {
         delay(10);
@@ -66,13 +97,11 @@ void loop()
     }
 
     // -------------------------------------------------------------------------
-    // Receive live CRSF data
+    // Receive CRSF bytes
     // -------------------------------------------------------------------------
 
     crsfUart.update(crsfDecoder);
 
-    // UART activity proves that electrical/serial communication
-    // exists between the RP2 and QT Py.
     if (
         !receiverBytesSeen &&
         crsfUart.hasReceivedData()
@@ -86,44 +115,71 @@ void loop()
     }
 
     // -------------------------------------------------------------------------
-    // Process newly decoded RC channel frames
+    // Process valid RC channel frames
     // -------------------------------------------------------------------------
 
     if (crsfDecoder.hasNewChannels())
     {
-        if (!receiverFramesSeen)
-        {
-            receiverFramesSeen = true;
-
-            statusLed.setStatus(
-                SystemStatus::ReceiverFrames
-            );
-        }
-
-        // Copy the live CRSF channel values into our protocol/raw
-        // channel representation.
         rawChannels =
             crsfDecoder.getChannels();
 
-        // CRSF-specific raw values -> normalized 0-65535 values.
         channelNormalizer.update(
             rawChannels,
             normalizedChannels
         );
 
-        // Normalized channels -> joystick axes/buttons.
         channelMapper.update(
             normalizedChannels,
             channelState
         );
 
-        // Send the live transmitter state to Windows.
-        usbHid.update(
-            channelState
+        lastValidRcFrameMs =
+            millis();
+
+        receiverFramesSeen = true;
+        receiverLost = false;
+
+        statusLed.setStatus(
+            SystemStatus::ReceiverFrames
         );
 
         crsfDecoder.clearNewChannels();
     }
+
+    // -------------------------------------------------------------------------
+    // Receiver timeout / failsafe
+    // -------------------------------------------------------------------------
+
+    if (receiverFramesSeen)
+    {
+        const uint32_t now =
+            millis();
+
+        if (
+            !receiverLost &&
+            (now - lastValidRcFrameMs) >=
+                RECEIVER_TIMEOUT_MS
+        )
+        {
+            receiverLost = true;
+
+            setFailsafeState(
+                channelState
+            );
+
+            statusLed.setStatus(
+                SystemStatus::ReceiverLost
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // USB HID
+    // -------------------------------------------------------------------------
+
+    usbHid.update(
+        channelState
+    );
 
     delay(1);
 }
