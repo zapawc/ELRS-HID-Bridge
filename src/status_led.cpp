@@ -9,7 +9,6 @@ namespace
     constexpr uint8_t NEOPIXEL_POWER_PIN = 11;
     constexpr uint8_t PIXEL_COUNT = 1;
 
-    // Keep the onboard pixel intentionally dim.
     constexpr uint8_t LED_BRIGHTNESS = 24;
 
     Adafruit_NeoPixel pixel(
@@ -21,13 +20,9 @@ namespace
 
 void StatusLed::begin()
 {
-    // The QT Py RP2040 switches power to the onboard NeoPixel
-    // through GPIO11. The generic Pico board definition does not
-    // automatically enable this for us.
     pinMode(NEOPIXEL_POWER_PIN, OUTPUT);
     digitalWrite(NEOPIXEL_POWER_PIN, HIGH);
 
-    // Give power a moment to stabilize before talking to the pixel.
     delay(1);
 
     pixel.begin();
@@ -48,12 +43,26 @@ void StatusLed::setStatus(SystemStatus status)
             break;
 
         case SystemStatus::Ready:
-            // Blue
+            // Blue:
+            // Firmware healthy, no receiver bytes seen yet.
             setColor(0, 0, 255);
             break;
 
+        case SystemStatus::ReceiverBytes:
+            // Yellow:
+            // UART activity exists, but no valid RC frame yet.
+            setColor(255, 180, 0);
+            break;
+
+        case SystemStatus::ReceiverFrames:
+            // Green:
+            // Valid CRSF RC channel frames decoded.
+            setColor(0, 255, 0);
+            break;
+
         case SystemStatus::Error:
-            // Red
+            // Red:
+            // Startup/self-test failure.
             setColor(255, 0, 0);
             break;
     }

@@ -3,8 +3,9 @@
 #include "channel_mapper.h"
 #include "channel_normalizer.h"
 #include "channel_state.h"
+#include "crsf_decoder.h"
 #include "crsf_self_test.h"
-#include "debug_log.h"
+#include "crsf_uart.h"
 #include "normalized_channels.h"
 #include "raw_channel_test.h"
 #include "raw_channels.h"
@@ -21,65 +22,98 @@ ChannelMapper channelMapper;
 UsbHid usbHid;
 StatusLed statusLed;
 
+CrsfUart crsfUart;
+CrsfDecoder crsfDecoder;
+
 bool crsfSelfTestPassed = false;
+
+bool receiverBytesSeen = false;
+bool receiverFramesSeen = false;
 
 void setup()
 {
     statusLed.begin();
 
-    DebugLog::begin();
-
     usbHid.begin();
 
-    // Run the CRSF protocol self-test once at startup.
+    // Validate our CRSF implementation before accepting
+    // live receiver data.
     crsfSelfTestPassed =
         CrsfSelfTest::run();
 
-    if (crsfSelfTestPassed)
+    if (!crsfSelfTestPassed)
     {
-        DebugLog::info(
-            "[SELFTEST] CRSF decoder: PASS"
-        );
-
-        statusLed.setStatus(
-            SystemStatus::Ready
-        );
-    }
-    else
-    {
-        DebugLog::info(
-            "[SELFTEST] CRSF decoder: FAIL"
-        );
-
         statusLed.setStatus(
             SystemStatus::Error
         );
     }
+    else
+    {
+        statusLed.setStatus(
+            SystemStatus::Ready
+        );
+    }
 
+    crsfUart.begin();
+
+    // Keep the known-good synthetic HID source active.
     rawChannelTest.begin();
 }
 
 void loop()
 {
-    // Generate synthetic CRSF-style channel values.
+    // -------------------------------------------------------------------------
+    // Live CRSF validation path
+    // -------------------------------------------------------------------------
+
+    crsfUart.update(crsfDecoder);
+
+    if (
+        crsfSelfTestPassed &&
+        !receiverBytesSeen &&
+        crsfUart.hasReceivedData()
+    )
+    {
+        receiverBytesSeen = true;
+
+        statusLed.setStatus(
+            SystemStatus::ReceiverBytes
+        );
+    }
+
+    if (
+        crsfSelfTestPassed &&
+        crsfDecoder.hasNewChannels()
+    )
+    {
+        receiverFramesSeen = true;
+
+        statusLed.setStatus(
+            SystemStatus::ReceiverFrames
+        );
+
+        // We are only proving decode at this stage.
+        // The synthetic joystick source remains active.
+        crsfDecoder.clearNewChannels();
+    }
+
+    // -------------------------------------------------------------------------
+    // Existing known-good synthetic joystick path
+    // -------------------------------------------------------------------------
+
     rawChannelTest.update(rawChannels);
 
-    // Raw/protocol values -> normalized 0-65535 values.
     channelNormalizer.update(
         rawChannels,
         normalizedChannels
     );
 
-    // Normalized channels -> semantic joystick state.
     channelMapper.update(
         normalizedChannels,
         channelState
     );
 
-    // Development-time fault indicator.
-    //
-    // Button 32 remains OFF when the CRSF self-test passes.
-    // Button 32 is forced ON if the self-test fails.
+    // Button 32 remains the startup self-test fault indicator.
     if (!crsfSelfTestPassed)
     {
         channelState.buttons |=

@@ -4,6 +4,8 @@ enum class SystemStatus
 {
     Startup,
     Ready,
+    ReceiverBytes,
+    ReceiverFrames,
     Error
 };
 
