@@ -10,11 +10,24 @@ void ChannelMapper::update(
     ChannelState& state
 ) const
 {
-    // Default primary control mapping.
+    // Primary control mapping
+    //
+    // CH1 -> Roll
+    // CH2 -> Pitch
+    // CH3 -> Throttle
+    // CH4 -> Yaw
+    //
+    // HID direction corrections:
+    // Roll     = normal
+    // Pitch    = inverted
+    // Throttle = inverted
+    // Yaw      = inverted
+
     state.roll =
         channels.get(ChannelIndex::CH1);
 
     state.pitch =
+        NormalizedChannels::MAX -
         channels.get(ChannelIndex::CH2);
 
     state.throttle =
@@ -23,10 +36,16 @@ void ChannelMapper::update(
     state.yaw =
         channels.get(ChannelIndex::CH4);
 
-    // Rebuild button state every update.
+    // Rebuild button state on every update.
     state.buttons = 0;
 
-    // CH5-CH16 currently map to buttons 1-12.
+    // Current AUX behavior:
+    //
+    // CH5-CH16 -> HID Buttons 1-12
+    //
+    // A channel activates its button whenever its normalized value
+    // is above the midpoint. This is intentionally simple for now.
+
     for (
         uint8_t channel = 4;
         channel < NormalizedChannels::CHANNEL_COUNT;

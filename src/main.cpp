@@ -7,7 +7,6 @@
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
 #include "normalized_channels.h"
-#include "raw_channel_test.h"
 #include "raw_channels.h"
 #include "status_led.h"
 #include "usb_hid.h"
@@ -16,7 +15,6 @@ RawChannels rawChannels;
 NormalizedChannels normalizedChannels;
 ChannelState channelState;
 
-RawChannelTest rawChannelTest;
 ChannelNormalizer channelNormalizer;
 ChannelMapper channelMapper;
 UsbHid usbHid;
@@ -26,7 +24,6 @@ CrsfUart crsfUart;
 CrsfDecoder crsfDecoder;
 
 bool crsfSelfTestPassed = false;
-
 bool receiverBytesSeen = false;
 bool receiverFramesSeen = false;
 
@@ -36,7 +33,7 @@ void setup()
 
     usbHid.begin();
 
-    // Validate our CRSF implementation before accepting
+    // Validate the CRSF implementation before accepting
     // live receiver data.
     crsfSelfTestPassed =
         CrsfSelfTest::run();
@@ -46,30 +43,37 @@ void setup()
         statusLed.setStatus(
             SystemStatus::Error
         );
-    }
-    else
-    {
-        statusLed.setStatus(
-            SystemStatus::Ready
-        );
+
+        return;
     }
 
+    statusLed.setStatus(
+        SystemStatus::Ready
+    );
+
+    // Start the physical CRSF UART.
     crsfUart.begin();
-
-    // Keep the known-good synthetic HID source active.
-    rawChannelTest.begin();
 }
 
 void loop()
 {
+    // If the startup protocol self-test failed, leave the
+    // system in its error state and do not process receiver data.
+    if (!crsfSelfTestPassed)
+    {
+        delay(10);
+        return;
+    }
+
     // -------------------------------------------------------------------------
-    // Live CRSF validation path
+    // Receive live CRSF data
     // -------------------------------------------------------------------------
 
     crsfUart.update(crsfDecoder);
 
+    // UART activity proves that electrical/serial communication
+    // exists between the RP2 and QT Py.
     if (
-        crsfSelfTestPassed &&
         !receiverBytesSeen &&
         crsfUart.hasReceivedData()
     )
@@ -81,46 +85,45 @@ void loop()
         );
     }
 
-    if (
-        crsfSelfTestPassed &&
-        crsfDecoder.hasNewChannels()
-    )
-    {
-        receiverFramesSeen = true;
+    // -------------------------------------------------------------------------
+    // Process newly decoded RC channel frames
+    // -------------------------------------------------------------------------
 
-        statusLed.setStatus(
-            SystemStatus::ReceiverFrames
+    if (crsfDecoder.hasNewChannels())
+    {
+        if (!receiverFramesSeen)
+        {
+            receiverFramesSeen = true;
+
+            statusLed.setStatus(
+                SystemStatus::ReceiverFrames
+            );
+        }
+
+        // Copy the live CRSF channel values into our protocol/raw
+        // channel representation.
+        rawChannels =
+            crsfDecoder.getChannels();
+
+        // CRSF-specific raw values -> normalized 0-65535 values.
+        channelNormalizer.update(
+            rawChannels,
+            normalizedChannels
         );
 
-        // We are only proving decode at this stage.
-        // The synthetic joystick source remains active.
+        // Normalized channels -> joystick axes/buttons.
+        channelMapper.update(
+            normalizedChannels,
+            channelState
+        );
+
+        // Send the live transmitter state to Windows.
+        usbHid.update(
+            channelState
+        );
+
         crsfDecoder.clearNewChannels();
     }
 
-    // -------------------------------------------------------------------------
-    // Existing known-good synthetic joystick path
-    // -------------------------------------------------------------------------
-
-    rawChannelTest.update(rawChannels);
-
-    channelNormalizer.update(
-        rawChannels,
-        normalizedChannels
-    );
-
-    channelMapper.update(
-        normalizedChannels,
-        channelState
-    );
-
-    // Button 32 remains the startup self-test fault indicator.
-    if (!crsfSelfTestPassed)
-    {
-        channelState.buttons |=
-            (1UL << 31);
-    }
-
-    usbHid.update(channelState);
-
-    delay(10);
+    delay(1);
 }

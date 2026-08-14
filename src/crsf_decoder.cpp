@@ -8,6 +8,11 @@ namespace
     constexpr size_t CRSF_LENGTH_OFFSET = 1;
     constexpr size_t CRSF_TYPE_OFFSET = 2;
 
+    constexpr uint8_t CRSF_SYNC_BYTE = 0xC8;
+
+    constexpr uint8_t CRSF_MIN_LENGTH = 2;
+    constexpr uint8_t CRSF_MAX_LENGTH = 62;
+
     uint8_t crc8DvbS2(
         const uint8_t* data,
         size_t length
@@ -24,7 +29,8 @@ namespace
                 if (crc & 0x80)
                 {
                     crc = static_cast<uint8_t>(
-                        (crc << 1) ^ Crsf::CRC_POLYNOMIAL
+                        (crc << 1) ^
+                        Crsf::CRC_POLYNOMIAL
                     );
                 }
                 else
@@ -49,52 +55,75 @@ void CrsfDecoder::reset()
 
 void CrsfDecoder::pushByte(uint8_t byte)
 {
-    // Protect against malformed input overflowing the frame buffer.
+    // -------------------------------------------------------------------------
+    // Synchronization
+    //
+    // For the receiver -> flight-controller CRSF stream, normal frames begin
+    // with the flight-controller sync/address byte 0xC8.
+    //
+    // Ignore bytes until we find a valid frame start. This lets the decoder
+    // recover when firmware begins listening halfway through an existing frame.
+    // -------------------------------------------------------------------------
+
+    if (frameIndex == 0)
+    {
+        if (byte != CRSF_SYNC_BYTE)
+        {
+            return;
+        }
+
+        frameBuffer[frameIndex++] = byte;
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // Length byte
+    // -------------------------------------------------------------------------
+
+    if (frameIndex == 1)
+    {
+        if (
+            byte < CRSF_MIN_LENGTH ||
+            byte > CRSF_MAX_LENGTH
+        )
+        {
+            // This was not actually a valid frame start.
+            //
+            // If this byte itself happens to be another sync byte, preserve
+            // it as the beginning of the next candidate frame.
+            frameIndex = 0;
+            expectedFrameSize = 0;
+
+            if (byte == CRSF_SYNC_BYTE)
+            {
+                frameBuffer[frameIndex++] = byte;
+            }
+
+            return;
+        }
+
+        frameBuffer[frameIndex++] = byte;
+
+        expectedFrameSize =
+            static_cast<size_t>(byte) +
+            CRSF_HEADER_SIZE;
+
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // Remaining frame bytes
+    // -------------------------------------------------------------------------
+
     if (frameIndex >= MAX_FRAME_SIZE)
     {
-        reset();
+        frameIndex = 0;
+        expectedFrameSize = 0;
+        return;
     }
 
     frameBuffer[frameIndex++] = byte;
 
-    // Once Address and Length have arrived, determine the complete
-    // number of bytes expected for this frame.
-    if (frameIndex == CRSF_HEADER_SIZE)
-    {
-        const uint8_t crsfLength =
-            frameBuffer[CRSF_LENGTH_OFFSET];
-
-        // CRSF Length includes:
-        //
-        //   Type
-        //   Payload
-        //   CRC
-        //
-        // It does not include:
-        //
-        //   Address
-        //   Length
-        //
-        expectedFrameSize =
-            static_cast<size_t>(crsfLength) + CRSF_HEADER_SIZE;
-
-        // Minimum meaningful frame:
-        //
-        // Address
-        // Length
-        // Type
-        // CRC
-        if (
-            expectedFrameSize < 4 ||
-            expectedFrameSize > MAX_FRAME_SIZE
-        )
-        {
-            reset();
-            return;
-        }
-    }
-
-    // A complete frame has been assembled.
     if (
         expectedFrameSize != 0 &&
         frameIndex == expectedFrameSize
@@ -102,7 +131,7 @@ void CrsfDecoder::pushByte(uint8_t byte)
     {
         processFrame();
 
-        // Prepare immediately for the next frame.
+        // Always return to sync-search mode after a complete candidate frame.
         frameIndex = 0;
         expectedFrameSize = 0;
     }
@@ -129,27 +158,18 @@ void CrsfDecoder::clearNewChannels()
 
 void CrsfDecoder::processFrame()
 {
-    // Layout:
-    //
-    // [0]      Address
-    // [1]      Length
-    // [2]      Type
-    // [3..N-1] Payload
-    // [N]      CRC
-
     if (frameIndex < 4)
     {
         return;
     }
 
-    const size_t crcIndex = frameIndex - 1;
+    const size_t crcIndex =
+        frameIndex - 1;
 
     const uint8_t receivedCrc =
         frameBuffer[crcIndex];
 
-    // CRSF CRC covers Type + Payload.
-    //
-    // It does not cover Address, Length, or the CRC byte itself.
+    // CRC covers Type + Payload only.
     const uint8_t calculatedCrc =
         crc8DvbS2(
             &frameBuffer[CRSF_TYPE_OFFSET],
@@ -158,23 +178,26 @@ void CrsfDecoder::processFrame()
 
     if (receivedCrc != calculatedCrc)
     {
+        // Invalid candidate frame.
+        //
+        // pushByte() will return to sync-search mode immediately after this.
         return;
     }
 
-    // From this point onward the frame has passed CRC validation.
     CrsfFrame frame;
 
-    frame.address = frameBuffer[0];
-    frame.length = frameBuffer[1];
-    frame.type = frameBuffer[CRSF_TYPE_OFFSET];
+    frame.address =
+        frameBuffer[0];
 
-    // Length contains:
+    frame.length =
+        frameBuffer[CRSF_LENGTH_OFFSET];
+
+    frame.type =
+        frameBuffer[CRSF_TYPE_OFFSET];
+
+    // Length includes:
     //
     // Type + Payload + CRC
-    //
-    // Therefore:
-    //
-    // Payload Length = Length - Type - CRC
     frame.payloadLength =
         static_cast<uint8_t>(
             frame.length - 2
@@ -182,14 +205,17 @@ void CrsfDecoder::processFrame()
 
     if (frame.payloadLength > 0)
     {
-        frame.payload = &frameBuffer[3];
+        frame.payload =
+            &frameBuffer[3];
     }
 
     dispatchFrame(frame);
 }
 
 
-void CrsfDecoder::dispatchFrame(const CrsfFrame& frame)
+void CrsfDecoder::dispatchFrame(
+    const CrsfFrame& frame
+)
 {
     switch (frame.type)
     {
@@ -209,12 +235,11 @@ void CrsfDecoder::dispatchFrame(const CrsfFrame& frame)
         }
 
         case Crsf::FRAME_LINK_STATISTICS:
-            // Reserved for future link-statistics support.
+            // Reserved for future support.
             break;
 
         default:
-            // Unknown or currently unsupported frame types are
-            // intentionally ignored.
+            // Unsupported frames are intentionally ignored.
             break;
     }
 }
