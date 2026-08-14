@@ -1,27 +1,73 @@
 #include "channel_mapper.h"
 
-bool ChannelMapper::channelIsHigh(uint16_t value)
+namespace
 {
-    return value > NormalizedChannels::MID;
+    constexpr uint16_t SWITCH_LOW_THRESHOLD = 16384;
+    constexpr uint16_t SWITCH_HIGH_THRESHOLD = 49151;
 }
+
+
+ChannelMapper::SwitchPosition
+ChannelMapper::decodeThreePosition(uint16_t value)
+{
+    if (value < SWITCH_LOW_THRESHOLD)
+    {
+        return SwitchPosition::Low;
+    }
+
+    if (value > SWITCH_HIGH_THRESHOLD)
+    {
+        return SwitchPosition::High;
+    }
+
+    return SwitchPosition::Center;
+}
+
+
+bool ChannelMapper::decodeTwoPosition(uint16_t value)
+{
+    return value > SWITCH_HIGH_THRESHOLD;
+}
+
+
+void ChannelMapper::setButton(
+    ChannelState& state,
+    uint8_t buttonNumber
+)
+{
+    if (
+        buttonNumber < 1 ||
+        buttonNumber > 32
+    )
+    {
+        return;
+    }
+
+    state.buttons |=
+        (1UL << (buttonNumber - 1));
+}
+
 
 void ChannelMapper::update(
     const NormalizedChannels& channels,
     ChannelState& state
 ) const
 {
-    // Primary control mapping
+    // -------------------------------------------------------------------------
+    // Primary controls
     //
     // CH1 -> Roll
     // CH2 -> Pitch
     // CH3 -> Throttle
     // CH4 -> Yaw
     //
-    // HID direction corrections:
+    // Confirmed HID orientation:
+    //
     // Roll     = normal
     // Pitch    = inverted
     // Throttle = normal
     // Yaw      = normal
+    // -------------------------------------------------------------------------
 
     state.roll =
         channels.get(ChannelIndex::CH1);
@@ -36,29 +82,206 @@ void ChannelMapper::update(
     state.yaw =
         channels.get(ChannelIndex::CH4);
 
-    // Rebuild button state on every update.
+
+    // -------------------------------------------------------------------------
+    // AUX controls
+    // -------------------------------------------------------------------------
+
     state.buttons = 0;
 
-    // Current AUX behavior:
-    //
-    // CH5-CH16 -> HID Buttons 1-12
-    //
-    // A channel activates its button whenever its normalized value
-    // is above the midpoint. This is intentionally simple for now.
 
-    for (
-        uint8_t channel = 4;
-        channel < NormalizedChannels::CHANNEL_COUNT;
-        ++channel
+    // -------------------------------------------------------------------------
+    // SF / CH5
+    //
+    // Up   -> released
+    // Down -> Button 1
+    // -------------------------------------------------------------------------
+
+    if (
+        decodeTwoPosition(
+            channels.get(ChannelIndex::CH5)
+        )
     )
     {
-        if (channelIsHigh(channels.channel[channel]))
-        {
-            const uint8_t buttonIndex =
-                channel - 4;
+        setButton(state, 1);
+    }
 
-            state.buttons |=
-                (1UL << buttonIndex);
-        }
+
+    // -------------------------------------------------------------------------
+    // SA / CH6
+    //
+    // Up     -> no button
+    // Middle -> Button 2
+    // Down   -> Button 3
+    // -------------------------------------------------------------------------
+
+    switch (
+        decodeThreePosition(
+            channels.get(ChannelIndex::CH6)
+        )
+    )
+    {
+        case SwitchPosition::Center:
+            setButton(state, 2);
+            break;
+
+        case SwitchPosition::High:
+            setButton(state, 3);
+            break;
+
+        case SwitchPosition::Low:
+            break;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // SB / CH7
+    //
+    // Up     -> no button
+    // Middle -> Button 4
+    // Down   -> Button 5
+    // -------------------------------------------------------------------------
+
+    switch (
+        decodeThreePosition(
+            channels.get(ChannelIndex::CH7)
+        )
+    )
+    {
+        case SwitchPosition::Center:
+            setButton(state, 4);
+            break;
+
+        case SwitchPosition::High:
+            setButton(state, 5);
+            break;
+
+        case SwitchPosition::Low:
+            break;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // SC / CH8
+    //
+    // Up     -> no button
+    // Middle -> Button 6
+    // Down   -> Button 7
+    // -------------------------------------------------------------------------
+
+    switch (
+        decodeThreePosition(
+            channels.get(ChannelIndex::CH8)
+        )
+    )
+    {
+        case SwitchPosition::Center:
+            setButton(state, 6);
+            break;
+
+        case SwitchPosition::High:
+            setButton(state, 7);
+            break;
+
+        case SwitchPosition::Low:
+            break;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // SD / CH9
+    //
+    // Up     -> no button
+    // Middle -> Button 8
+    // Down   -> Button 9
+    // -------------------------------------------------------------------------
+
+    switch (
+        decodeThreePosition(
+            channels.get(ChannelIndex::CH9)
+        )
+    )
+    {
+        case SwitchPosition::Center:
+            setButton(state, 8);
+            break;
+
+        case SwitchPosition::High:
+            setButton(state, 9);
+            break;
+
+        case SwitchPosition::Low:
+            break;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // SE / CH10
+    //
+    // Up     -> no button
+    // Middle -> Button 10
+    // Down   -> Button 11
+    // -------------------------------------------------------------------------
+
+    switch (
+        decodeThreePosition(
+            channels.get(ChannelIndex::CH10)
+        )
+    )
+    {
+        case SwitchPosition::Center:
+            setButton(state, 10);
+            break;
+
+        case SwitchPosition::High:
+            setButton(state, 11);
+            break;
+
+        case SwitchPosition::Low:
+            break;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // SG / CH11
+    //
+    // Up     -> no button
+    // Middle -> Button 12
+    // Down   -> Button 13
+    // -------------------------------------------------------------------------
+
+    switch (
+        decodeThreePosition(
+            channels.get(ChannelIndex::CH11)
+        )
+    )
+    {
+        case SwitchPosition::Center:
+            setButton(state, 12);
+            break;
+
+        case SwitchPosition::High:
+            setButton(state, 13);
+            break;
+
+        case SwitchPosition::Low:
+            break;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // SH / CH12
+    //
+    // Released -> no button
+    // Pressed  -> Button 14
+    // -------------------------------------------------------------------------
+
+    if (
+        decodeTwoPosition(
+            channels.get(ChannelIndex::CH12)
+        )
+    )
+    {
+        setButton(state, 14);
     }
 }

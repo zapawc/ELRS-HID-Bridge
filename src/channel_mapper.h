@@ -14,5 +14,23 @@ public:
     ) const;
 
 private:
-    static bool channelIsHigh(uint16_t value);
+    enum class SwitchPosition
+    {
+        Low,
+        Center,
+        High
+    };
+
+    static SwitchPosition decodeThreePosition(
+        uint16_t value
+    );
+
+    static bool decodeTwoPosition(
+        uint16_t value
+    );
+
+    static void setButton(
+        ChannelState& state,
+        uint8_t buttonNumber
+    );
 };
