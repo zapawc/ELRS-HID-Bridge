@@ -18,22 +18,38 @@ namespace
     );
 }
 
+
 void StatusLed::begin()
 {
-    pinMode(NEOPIXEL_POWER_PIN, OUTPUT);
-    digitalWrite(NEOPIXEL_POWER_PIN, HIGH);
+    pinMode(
+        NEOPIXEL_POWER_PIN,
+        OUTPUT
+    );
+
+    digitalWrite(
+        NEOPIXEL_POWER_PIN,
+        HIGH
+    );
 
     delay(1);
 
     pixel.begin();
-    pixel.setBrightness(LED_BRIGHTNESS);
+    pixel.setBrightness(
+        LED_BRIGHTNESS
+    );
+
     pixel.clear();
     pixel.show();
 
-    setStatus(SystemStatus::Startup);
+    setStatus(
+        SystemStatus::Startup
+    );
 }
 
-void StatusLed::setStatus(SystemStatus status)
+
+void StatusLed::setStatus(
+    SystemStatus status
+)
 {
     switch (status)
     {
@@ -44,25 +60,24 @@ void StatusLed::setStatus(SystemStatus status)
 
         case SystemStatus::Ready:
             // Blue:
-            // Firmware healthy, waiting for receiver activity.
+            // Firmware healthy, waiting for RC activity.
             setColor(0, 0, 255);
             break;
 
         case SystemStatus::ReceiverBytes:
             // Yellow:
-            // UART traffic seen, but no valid RC frame yet.
+            // UART bytes exist, but no valid RC frame yet.
             setColor(255, 180, 0);
             break;
 
         case SystemStatus::ReceiverFrames:
-            // Green:
-            // Valid live RC channel frames are being received.
+            // Normal-operation green.
             setColor(0, 255, 0);
             break;
 
         case SystemStatus::ReceiverLost:
             // Purple:
-            // Valid RC frames stopped arriving.
+            // RC frame timeout / failsafe.
             setColor(180, 0, 255);
             break;
 
@@ -74,6 +89,42 @@ void StatusLed::setStatus(SystemStatus status)
     }
 }
 
+
+void StatusLed::showLinkQuality(
+    uint8_t linkQuality
+)
+{
+    if (linkQuality >= 90)
+    {
+        // Lime green.
+        //
+        // Deliberately different from the normal-operation
+        // pure green so a button press is immediately visible.
+        setColor(120, 255, 0);
+        return;
+    }
+
+    if (linkQuality >= 70)
+    {
+        // Yellow.
+        setColor(255, 180, 0);
+        return;
+    }
+
+    // Orange/red:
+    // poor link quality.
+    setColor(255, 45, 0);
+}
+
+
+void StatusLed::showDiagnosticUnavailable()
+{
+    // White indicates that diagnostic mode was entered,
+    // but no current link-quality value was available.
+    setColor(255, 255, 255);
+}
+
+
 void StatusLed::setColor(
     unsigned char red,
     unsigned char green,
@@ -82,7 +133,11 @@ void StatusLed::setColor(
 {
     pixel.setPixelColor(
         0,
-        pixel.Color(red, green, blue)
+        pixel.Color(
+            red,
+            green,
+            blue
+        )
     );
 
     pixel.show();

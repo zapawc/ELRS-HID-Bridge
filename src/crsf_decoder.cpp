@@ -49,7 +49,9 @@ void CrsfDecoder::reset()
 {
     frameIndex = 0;
     expectedFrameSize = 0;
+
     newChannels = false;
+    newLinkStatistics = false;
 }
 
 
@@ -58,11 +60,11 @@ void CrsfDecoder::pushByte(uint8_t byte)
     // -------------------------------------------------------------------------
     // Synchronization
     //
-    // For the receiver -> flight-controller CRSF stream, normal frames begin
-    // with the flight-controller sync/address byte 0xC8.
+    // Receiver -> host CRSF frames normally begin with the flight-controller
+    // address/sync byte 0xC8.
     //
-    // Ignore bytes until we find a valid frame start. This lets the decoder
-    // recover when firmware begins listening halfway through an existing frame.
+    // Ignore bytes until a plausible frame start is found. This allows the
+    // decoder to recover if firmware begins listening in the middle of a frame.
     // -------------------------------------------------------------------------
 
     if (frameIndex == 0)
@@ -87,10 +89,10 @@ void CrsfDecoder::pushByte(uint8_t byte)
             byte > CRSF_MAX_LENGTH
         )
         {
-            // This was not actually a valid frame start.
+            // Invalid candidate frame.
             //
-            // If this byte itself happens to be another sync byte, preserve
-            // it as the beginning of the next candidate frame.
+            // If this byte itself is another sync byte, preserve it as the
+            // beginning of the next candidate frame.
             frameIndex = 0;
             expectedFrameSize = 0;
 
@@ -131,7 +133,8 @@ void CrsfDecoder::pushByte(uint8_t byte)
     {
         processFrame();
 
-        // Always return to sync-search mode after a complete candidate frame.
+        // Always return to synchronization-search mode after processing a
+        // complete candidate frame.
         frameIndex = 0;
         expectedFrameSize = 0;
     }
@@ -156,6 +159,25 @@ void CrsfDecoder::clearNewChannels()
 }
 
 
+bool CrsfDecoder::hasNewLinkStatistics() const
+{
+    return newLinkStatistics;
+}
+
+
+const LinkStatistics&
+CrsfDecoder::getLinkStatistics() const
+{
+    return linkStatistics;
+}
+
+
+void CrsfDecoder::clearNewLinkStatistics()
+{
+    newLinkStatistics = false;
+}
+
+
 void CrsfDecoder::processFrame()
 {
     if (frameIndex < 4)
@@ -169,7 +191,9 @@ void CrsfDecoder::processFrame()
     const uint8_t receivedCrc =
         frameBuffer[crcIndex];
 
-    // CRC covers Type + Payload only.
+    // CRSF CRC covers Type + Payload only.
+    //
+    // Address, Length, and the CRC byte itself are excluded.
     const uint8_t calculatedCrc =
         crc8DvbS2(
             &frameBuffer[CRSF_TYPE_OFFSET],
@@ -178,11 +202,12 @@ void CrsfDecoder::processFrame()
 
     if (receivedCrc != calculatedCrc)
     {
-        // Invalid candidate frame.
-        //
-        // pushByte() will return to sync-search mode immediately after this.
         return;
     }
+
+    // -------------------------------------------------------------------------
+    // Construct a validated frame view
+    // -------------------------------------------------------------------------
 
     CrsfFrame frame;
 
@@ -195,9 +220,13 @@ void CrsfDecoder::processFrame()
     frame.type =
         frameBuffer[CRSF_TYPE_OFFSET];
 
-    // Length includes:
+    // CRSF Length includes:
     //
     // Type + Payload + CRC
+    //
+    // Therefore:
+    //
+    // Payload Length = Length - Type - CRC
     frame.payloadLength =
         static_cast<uint8_t>(
             frame.length - 2
@@ -235,11 +264,22 @@ void CrsfDecoder::dispatchFrame(
         }
 
         case Crsf::FRAME_LINK_STATISTICS:
-            // Reserved for future support.
+        {
+            if (
+                linkStatisticsDecoder.decode(
+                    frame,
+                    linkStatistics
+                )
+            )
+            {
+                newLinkStatistics = true;
+            }
+
             break;
+        }
 
         default:
-            // Unsupported frames are intentionally ignored.
+            // Unsupported frame types are intentionally ignored.
             break;
     }
 }

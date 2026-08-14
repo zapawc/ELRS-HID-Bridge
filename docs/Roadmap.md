@@ -7,13 +7,34 @@
 
 # Current Status
 
-The project has completed the core firmware architecture and is entering hardware integration.
+ELRS-HID-Bridge has reached functional hardware integration.
 
-Current focus:
+The complete input path has been validated on physical hardware:
 
-- UART receiver integration
-- Live CRSF decoding
-- Hardware validation
+    EdgeTX
+        ↓
+    ExpressLRS TX
+        ↓
+    ELRS RF Link
+        ↓
+    ExpressLRS Receiver
+        ↓
+    CRSF UART
+        ↓
+    RP2040
+        ↓
+    CRSF Decoder
+        ↓
+    Channel Normalization
+        ↓
+    Channel Mapping
+        ↓
+    USB HID
+        ↓
+    Host PC
+
+Current development is focused on diagnostics, configuration, documentation,
+and preparing the project for broader testing.
 
 ---
 
@@ -35,12 +56,12 @@ Current focus:
 - [x] Modular firmware architecture
 - [x] CRSF frame assembler
 - [x] CRC validation
+- [x] CRSF stream resynchronization
 - [x] Frame dispatcher
 - [x] Raw channel abstraction
 - [x] Channel normalization
 - [x] Channel mapping
 - [x] Deterministic protocol self-tests
-- [x] Optional USB debug logging
 - [x] RGB status LED framework
 - [x] Project documentation
 
@@ -48,26 +69,60 @@ Current focus:
 
 # Version 0.3 - Hardware Integration
 
-## In Progress
+## Completed
 
-- [ ] UART driver
-- [ ] ELRS receiver integration
-- [ ] Live CRSF frame decoding
-- [ ] Receiver state machine
-- [ ] Link detection
-- [ ] Hardware validation
+- [x] RP2040 hardware UART driver
+- [x] ExpressLRS receiver integration
+- [x] CRSF UART at 420000 baud
+- [x] Live CRSF frame decoding
+- [x] Live RC channel decoding
+- [x] ELRS-to-USB HID control
+- [x] Primary axis mapping
+- [x] AUX switch mapping
+- [x] ELRS AUX1 / arming-channel handling
+- [x] Receiver link-loss detection
+- [x] HID failsafe behavior
+- [x] Automatic recovery after receiver reconnect
+- [x] Hardware validation with RadioMaster RP2 receiver
+
+## Current Recommended EdgeTX Layout
+
+    CH1  Roll
+    CH2  Pitch
+    CH3  Throttle
+    CH4  Yaw
+    CH5  SF  - 2-position / ELRS AUX1
+    CH6  SA  - 3-position
+    CH7  SB  - 3-position
+    CH8  SC  - 3-position
+    CH9  SD  - 3-position
+    CH10 SE  - 3-position
+    CH11 SG  - 3-position
+    CH12 SH  - momentary
 
 ---
 
 # Version 0.4 - Diagnostics
 
+## In Progress
+
+- [x] Basic RGB status indication
+- [x] Receiver activity indication
+- [x] Valid CRSF frame indication
+- [x] Receiver timeout indication
+- [x] Startup protocol self-test
+
 ## Planned
 
-- [ ] Link statistics (CRSF 0x14)
-- [ ] CRC error indication
-- [ ] Receiver failsafe indication
+- [ ] CRSF link statistics (0x14)
+- [ ] Link quality monitoring
+- [ ] RSSI monitoring
+- [ ] CRC error tracking
+- [ ] Frame error counters
 - [ ] Rich RGB LED status patterns
-- [ ] Runtime debug messages
+- [ ] BOOT button input support
+- [ ] Diagnostic / maintenance mode
+- [ ] Runtime diagnostic interface
 - [ ] Startup diagnostics
 
 ---
@@ -77,9 +132,11 @@ Current focus:
 ## Planned
 
 - [ ] Configurable channel mapping
+- [ ] Configurable axis inversion
+- [ ] Configurable AUX switch types
 - [ ] Persistent configuration
 - [ ] Calibration
-- [ ] Maintenance pushbutton
+- [ ] BOOT-button configuration interface
 - [ ] Factory reset
 - [ ] USB configuration interface
 
@@ -89,6 +146,7 @@ Current focus:
 
 ## Planned
 
+- [ ] Additional ExpressLRS receiver validation
 - [ ] SBUS support
 - [ ] iBUS support
 - [ ] Additional receiver protocols
@@ -103,11 +161,14 @@ Current focus:
 
 - [ ] Stable firmware
 - [ ] Complete documentation
+- [ ] Recommended EdgeTX configuration guide
 - [ ] Wiring guide
+- [ ] Wiring diagram
 - [ ] Enclosure files
 - [ ] Build guide
 - [ ] Release binaries
 - [ ] Versioned releases
+- [ ] Open-source license finalized
 
 ---
 
@@ -123,3 +184,9 @@ Potential future enhancements:
 - CRSF telemetry decoding
 - Multiple receiver profiles
 - Automatic protocol detection
+- PC automation using transmitter switches
+- DVR / OBS control
+- Race-station controls
+- Timestamped pilot-input logging
+- Link-quality logging
+- Live stick-position display
