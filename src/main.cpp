@@ -9,6 +9,7 @@
 #include "crsf_decoder.h"
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
+#include "failsafe_policy.h"
 #include "normalized_channels.h"
 #include "raw_channels.h"
 #include "status_led.h"
@@ -40,6 +41,8 @@ ChannelMapper channelMapper(
     bridgeConfiguration
 );
 
+FailsafePolicy failsafePolicy;
+
 UsbHid usbHid;
 StatusLed statusLed;
 BootButton bootButton;
@@ -59,26 +62,6 @@ uint32_t diagnosticDisplayStartMs = 0;
 namespace
 {
     constexpr uint32_t DIAGNOSTIC_DISPLAY_MS = 3000;
-
-
-    void setFailsafeState(
-        ChannelState& state
-    )
-    {
-        state.roll =
-            NormalizedChannels::MID;
-
-        state.pitch =
-            NormalizedChannels::MID;
-
-        state.throttle =
-            NormalizedChannels::MIN;
-
-        state.yaw =
-            NormalizedChannels::MID;
-
-        state.buttons = 0;
-    }
 
 
     void restoreNormalLedState(
@@ -144,7 +127,7 @@ void setup()
         );
 
 
-        setFailsafeState(
+        failsafePolicy.apply(
             channelState
         );
 
@@ -166,7 +149,7 @@ void setup()
     crsfUart.begin();
 
 
-    setFailsafeState(
+    failsafePolicy.apply(
         channelState
     );
 
@@ -336,7 +319,7 @@ void loop()
         )
     )
     {
-        setFailsafeState(
+        failsafePolicy.apply(
             channelState
         );
 
