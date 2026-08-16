@@ -488,29 +488,9 @@ Version tags and final release-number transition policy are tracked in `docs/Rel
 
 ---
 
-## USB Identity
-
-The reference firmware presents a project-specific USB identity rather than the generic MCU/toolchain name:
-
-```text
-USB product       ELRS-HID-Bridge
-HID interface     ELRS-HID-Bridge
-USB manufacturer  zapawc
-```
-
-The PlatformIO environment remains named `pico`; that is an internal build target and is not intended to be the Windows joystick name.
-
-Windows may retain a previously cached game-controller name for an already-enumerated VID/PID. If a freshly flashed bridge still appears as `Pico` in `joy.cpl`, do not change VID/PID as a workaround; first distinguish Windows name caching from the firmware USB descriptors.
-
----
-
 ## Repository Layout
 
 ```text
-AUTHORS.md
-LICENSE
-THIRD_PARTY_NOTICES.md
-
 docs/
     Architecture.md
     Protocol.md
@@ -559,8 +539,6 @@ Ideas, bug reports, testing, documentation improvements, and pull requests are w
 
 Changes should preserve the critical RC-to-HID path and favor small regression-testable commits over broad rewrites.
 
-Contributions accepted into the project are distributed under the project's GPL-3.0-only license unless explicitly stated otherwise.
-
 ---
 
 ## Roadmap
@@ -571,17 +549,9 @@ See `docs/Roadmap.md`.
 
 ## License
 
-ELRS-HID-Bridge project code is licensed under the **GNU General Public License, version 3 only (`GPL-3.0-only`)**.
+License selection is pending.
 
-Copyright (C) 2026 Tommy Mills.
-
-You may use, study, modify, redistribute, and commercially distribute the firmware under the GPL-3.0 terms. Distributed derivative versions must preserve the GPL freedoms and provide the corresponding source as required by the license.
-
-See:
-
-- `LICENSE` for the complete GPL-3.0 license text;
-- `AUTHORS.md` for project attribution;
-- `THIRD_PARTY_NOTICES.md` for the current dependency-license inventory.
+An open-source license should be selected before Version 1.0.
 
 ---
 
@@ -596,3 +566,20 @@ This project builds on the work of:
 - TinyUSB
 
 Relevant prior-art projects should be acknowledged where appropriate as the public release documentation is finalized.
+
+
+## Reproducible v1.0 Build Baseline
+
+The hardware-tested v1.0 hardening baseline pins:
+
+```text
+Arduino-Pico framework   1.60000.0
+RP2040 toolchain         5.160100.260719
+Adafruit NeoPixel        1.15.5
+```
+
+These versions are declared in `platformio.ini`. Dependency updates should be intentional and followed by the full hardware regression suite.
+
+### Windows controller name
+
+The firmware advertises `ELRS-HID-Bridge` as its USB product and HID interface name. Windows has been verified to expose that bus-reported identity. Because the reference build retains the inherited RP2040/Pico VID/PID (`2E8A:000A`), Windows `joy.cpl` may display the controller as `Pico`. This is a cosmetic naming limitation; no custom driver or registry modification is required.

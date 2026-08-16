@@ -83,7 +83,9 @@ USB manufacturer  zapawc
 
 The PlatformIO environment name `pico` is intentionally retained because it is an internal build-target name, not a product identity.
 
-Windows can cache game-controller naming metadata. If a flashed release candidate still appears as `Pico` in `joy.cpl`, investigate Windows enumeration/cache behavior before changing VID/PID or altering the HID descriptor.
+Windows validation confirmed that the USB composite parent and HID interface both expose `ELRS-HID-Bridge` through `DEVPKEY_Device_BusReportedDeviceDesc`. The current build still enumerates with inherited VID/PID `0x2E8A:0x000A`, and `joy.cpl` continues to display `Pico`. The firmware product descriptor is therefore considered validated; the remaining label is an identity/VID-PID issue, not a reason to alter the HID report descriptor or require registry cleanup.
+
+For v1.0, retain the inherited `0x2E8A:0x000A` VID/PID. Windows bus-reported product identity is correctly `ELRS-HID-Bridge`; the remaining `joy.cpl` `Pico` label is documented as cosmetic. A dedicated PID can be reconsidered later if production/distribution needs justify it. See `docs/USB-Identity.md`.
 
 ---
 
@@ -100,6 +102,32 @@ Routine release validation should use the normal VS Code/PlatformIO workflow and
 
 Use the CLI only when troubleshooting specifically requires it; the documented reference workflow should not depend on users manually invoking `pio` commands.
 
+
+### Pinned known-good packages
+
+Captured from the hardware-tested `pico` environment at project Git HEAD `75aa4ff7fbdb05b3251452f5f14a736a22174744`:
+
+```text
+Platform manifest        raspberrypi 1.20.0
+Arduino-Pico framework   1.60000.0
+RP2040 toolchain         5.160100.260719
+Adafruit NeoPixel        1.15.5
+```
+
+`platformio.ini` explicitly pins the framework, toolchain, and NeoPixel versions. The project continues to use the maxgerhardt Raspberry Pi platform integration because that is the proven Arduino-Pico path for this build. PlatformIO supports exact package versions in dependency declarations; do not loosen these pins during the v1.0 cycle without repeating the full regression suite.
+
+### Known-good dependency capture
+
+Before pinning the release environment, run:
+
+```powershell
+.\tools\Capture-BuildEnvironment.ps1
+```
+
+The script reads the already-installed PlatformIO platform/framework/toolchain and project library metadata without invoking `pio`. It writes diagnostic output below `.pio/`; those generated files are not release-source files and should not be committed.
+
+Use the captured versions/commit as the basis for the subsequent `platformio.ini` pinning checkpoint. Do not substitute the newest available upstream version simply because it is current.
+
 ---
 
 ## 6. Remaining v1.0 Release Gates
@@ -107,10 +135,11 @@ Use the CLI only when troubleshooting specifically requires it; the documented r
 ### Release blocking
 
 - [x] Add GPL-3.0-only project license and attribution files.
-- [ ] Validate the Windows USB identity (`ELRS-HID-Bridge`) and document any cache-specific behavior.
+- [x] Validate the Windows USB product identity (`BusReported = ELRS-HID-Bridge`) and document the remaining `joy.cpl` `Pico` behavior.
+- [x] Decide v1.0 USB identity policy: retain inherited `0x2E8A:0x000A`; `joy.cpl` `Pico` label is a documented cosmetic limitation.
 - [ ] Validate the wiring instructions against the final reference hardware.
 - [ ] Validate the EdgeTX/ExpressLRS setup instructions from a clean setup perspective.
-- [ ] Pin release-critical PlatformIO/core/library dependency versions so the v1.0 build is reproducible.
+- [x] Capture and pin release-critical Arduino-Pico/toolchain/NeoPixel versions from the known-good build environment.
 - [ ] Perform a clean `pico` build using the documented environment.
 - [ ] Flash the release candidate and run the full hardware regression checklist.
 - [ ] Produce and retain the tested release firmware binary.
@@ -168,7 +197,7 @@ Do not change to `1.0.0` until the release-blocking checklist above is complete 
 Before tagging a release candidate, verify at minimum:
 
 - USB HID enumerates normally.
-- Windows controller/product identity is checked; `ELRS-HID-Bridge` is expected on a fresh enumeration.
+- USB bus-reported product identity is `ELRS-HID-Bridge`; final v1.0 VID/PID is verified and any Windows `joy.cpl` naming behavior is documented.
 - Roll direction/range correct.
 - Pitch direction/range correct.
 - Throttle direction/range correct.

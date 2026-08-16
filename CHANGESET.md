@@ -1,77 +1,41 @@
-# GPL + USB Identity Checkpoint
+# Build Pinning Checkpoint
 
 ## Purpose
 
-This checkpoint performs v1.0 project-identity and release-hygiene work without changing CRSF-to-HID control behavior.
+Freeze the release-critical packages that produced the known-good hardware-tested firmware, while closing the v1.0 USB identity decision without changing runtime behavior.
 
-It does four things:
+## Replace
 
-1. licenses ELRS-HID-Bridge project code under GPL-3.0-only;
-2. records original-project attribution;
-3. documents the current third-party dependency/license audit;
-4. changes the user-visible USB/HID identity from the generic Pico wording to `ELRS-HID-Bridge`.
+- `platformio.ini`
+- `README.md`
+- `docs/Architecture.md`
+- `docs/Roadmap.md`
+- `docs/Release.md`
+- `docs/USB-Identity.md`
 
-## Add these files
+## Known-good capture
 
-```text
-LICENSE
-AUTHORS.md
-THIRD_PARTY_NOTICES.md
-```
+- Project Git HEAD: `75aa4ff7fbdb05b3251452f5f14a736a22174744`
+- Raspberry Pi platform manifest: `1.20.0`
+- Arduino-Pico framework: `1.60000.0`
+- RP2040 toolchain: `5.160100.260719`
+- Adafruit NeoPixel: `1.15.5`
 
-## Replace these files
+## Expected behavior
 
-```text
-platformio.ini
-src/usb_hid.cpp
-README.md
-docs/Architecture.md
-docs/Roadmap.md
-docs/Protocol.md
-docs/Release.md
-```
+No runtime behavior should change. USB product identity remains `ELRS-HID-Bridge`; inherited VID/PID remains `2E8A:000A`; `joy.cpl` may continue to show `Pico`.
 
-No other source files should change for this checkpoint.
+## Test gate
 
-## Expected functional change
+1. Build the normal `pico` environment in VS Code/PlatformIO.
+2. Confirm no new Problems/build errors.
+3. Flash normally.
+4. Verify axes/buttons and LED states.
+5. Verify TX-off failsafe and automatic reconnect.
+6. Verify Liftoff behavior/performance.
+7. Verify `ELRS-HID-Bridge` still appears under EdgeTX **Other Devices**.
+8. Optional: rerun `tools/Capture-BuildEnvironment.ps1`; framework/toolchain/NeoPixel values should match the pinned versions.
 
-The only intended runtime-visible change is USB identity:
+## Suggested commit
 
-```text
-USB product:       ELRS-HID-Bridge
-HID interface:     ELRS-HID-Bridge
-USB manufacturer:  zapawc
-```
-
-The internal PlatformIO environment remains named `pico`. That is a build-target label and is not intended to be user-facing.
-
-## Test sequence
-
-1. Build the normal `pico` environment in VS Code / PlatformIO.
-2. Confirm there are no build errors and no new VS Code Problems.
-3. Flash the QT Py RP2040.
-4. Unplug and reconnect USB once after flashing.
-5. Open `joy.cpl` and record the controller name shown by Windows.
-6. Verify all eight analog HID axes and the expected buttons.
-7. Verify TX-off failsafe after approximately 500 ms:
-   - throttle -> minimum;
-   - all other analog axes -> center;
-   - all buttons -> released;
-   - LED -> purple.
-8. Power the transmitter back on and verify automatic recovery.
-9. Run the normal Liftoff regression.
-10. Open ExpressLRS Lua -> Other Devices and verify `ELRS-HID-Bridge` is still discoverable.
-
-## Windows naming note
-
-Windows can cache game-controller naming information. If `joy.cpl` still shows `Pico` after the firmware is flashed and USB has been unplugged/reconnected, **do not change VID/PID or alter the HID descriptor yet**. Report the observed name and continue the functional regression. The next troubleshooting step should distinguish a stale Windows name cache from an incorrect USB descriptor.
-
-## License validation
-
-Confirm GitHub recognizes the root `LICENSE` as GNU GPL v3 after the commit is pushed.
-
-## Suggested commit message
-
-```text
-Add GPL-3.0 licensing and normalize USB identity
-```
+`Pin known-good release build dependencies`

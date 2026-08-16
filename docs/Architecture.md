@@ -518,6 +518,10 @@ USB manufacturer  zapawc
 
 The USB product/manufacturer descriptors are configured through `platformio.ini`; the HID interface string is set by `UsbHid`. Keep the product and HID interface strings synchronized. The internal PlatformIO environment name `pico` is not a user-facing device identity.
 
+Windows hardware validation confirmed that the USB composite parent and HID interface both report `ELRS-HID-Bridge` through `DEVPKEY_Device_BusReportedDeviceDesc`. The current build still inherits VID/PID `0x2E8A:0x000A`; `joy.cpl` may therefore retain/display `Pico` even though the project-controlled product descriptor is correct.
+
+USB VID/PID allocation is treated as release/deployment identity policy rather than HID transport logic. Do not hard-code an unassigned project VID/PID in `UsbHid`. The preferred v1.0 path is a dedicated open-source PID allocation under VID `0x1209`, documented in `docs/USB-Identity.md`.
+
 It remains unaware of CRSF details.
 
 ### 5.18 BootButton
@@ -867,3 +871,10 @@ The upstream reference identity is:
 Features that make the reusable foundation more robust or easier to extend belong upstream.
 
 Features that merely implement a specific end application should generally remain examples, optional extensions, or forks.
+
+
+## Release Build Reproducibility
+
+The v1.0 reference build pins the hardware-tested Arduino-Pico framework (`1.60000.0`), RP2040 toolchain (`5.160100.260719`), and Adafruit NeoPixel (`1.15.5`) packages in `platformio.ini`. Build-system dependency changes are release-affecting changes and require the normal hardware regression suite.
+
+The USB product/interface descriptors remain `ELRS-HID-Bridge`, while the v1.0 reference build intentionally retains inherited VID/PID `0x2E8A:0x000A`. Windows `joy.cpl` may display `Pico`; this does not alter HID behavior or the bus-reported product identity.

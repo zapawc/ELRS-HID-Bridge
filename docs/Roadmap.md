@@ -228,22 +228,25 @@ The discovery proof-of-concept is valuable because it validates the bidirectiona
 - [x] explicitly define/test AUX analog failsafe behavior
 - [ ] final wiring guide validation
 - [ ] final EdgeTX setup guide validation
-- [ ] pin release-critical PlatformIO/core/library dependency versions
+- [x] capture and pin release-critical Arduino-Pico/toolchain/NeoPixel dependency versions
 - [ ] clean build from source on documented environment
 - [ ] release binary
 - [x] GPL-3.0-only license selected and added
 - [x] canonical firmware version source and CRSF Firmware ID encoding
+- [x] validate project-controlled USB descriptors on Windows (`BusReported = ELRS-HID-Bridge`)
+- [x] decide v1.0 USB identity policy: retain inherited `0x2E8A:0x000A`; document `joy.cpl` naming limitation
 - [ ] tag/release process
-- [x] README/Architecture/Protocol/Roadmap synchronized through GPL/USB-identity checkpoint
+- [x] README/Architecture/Protocol/Roadmap/Release synchronized through USB identity/build-capture checkpoint
 - [ ] final release-candidate documentation validation
 
 ### Current next release gates
 
-1. Validate the new `ELRS-HID-Bridge` USB identity on Windows and determine whether any remaining `Pico` label is a Windows cache artifact.
+1. Validate the newly pinned framework/toolchain/NeoPixel build on the reference hardware.
 2. Validate wiring and EdgeTX setup instructions from a clean-reader perspective.
-3. Pin release-critical PlatformIO/core/library dependency versions, then validate a clean `pico` build from the documented environment.
-4. Define the tag/release procedure and produce a tested release binary.
-5. Perform final release-candidate documentation/regression validation.
+3. Validate a clean `pico` build from the pinned environment.
+4. Define the tag/release procedure, produce a tested release binary, and perform final documentation/regression validation.
+
+Windows descriptor validation is complete: both the USB parent and HID interface report `ELRS-HID-Bridge`, while `joy.cpl` still displays `Pico` with the inherited `0x2E8A:0x000A` VID/PID. This is now an identity-allocation decision rather than a product-string defect.
 
 `docs/Release.md` tracks these gates and the version transition rules.
 
@@ -503,7 +506,7 @@ commit/tag checkpoint
 ### Control-path regression checklist
 
 - device enumerates as expected
-- Windows user-visible controller identity is recorded (`ELRS-HID-Bridge` expected; stale `Pico` investigated as a cache issue before changing firmware identity)
+- USB bus-reported identity is `ELRS-HID-Bridge`; inherited VID/PID and any `joy.cpl` `Pico` label are documented before changing firmware identity
 - Roll direction/range correct
 - Pitch direction/range correct
 - Throttle direction/range correct
