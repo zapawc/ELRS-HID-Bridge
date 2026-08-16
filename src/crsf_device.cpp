@@ -996,6 +996,101 @@ bool CrsfDevice::buildTextSelectionParameterResponse(
 }
 
 
+bool CrsfDevice::buildInfoParameterResponse(
+    const CrsfParameterRead& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    uint8_t parentFolder,
+    const char* name,
+    const char* info,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    outputLength = 0;
+
+
+    if (
+        request.parameterNumber !=
+            parameterNumber ||
+        request.chunkNumber != 0 ||
+        !requestIsForLocalDevice(
+            request.destination,
+            request.origin,
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    uint8_t payload[
+        MAX_EXTENDED_PAYLOAD_SIZE
+    ] = {};
+
+    size_t payloadIndex = 0;
+
+
+    payload[payloadIndex++] =
+        parameterNumber;
+
+    // This first INFO checkpoint is intentionally kept small enough to fit in
+    // one CRSF Parameter Settings Entry frame.
+    payload[payloadIndex++] = 0;
+
+    payload[payloadIndex++] =
+        parentFolder;
+
+    payload[payloadIndex++] =
+        Crsf::PARAMETER_TYPE_INFO;
+
+
+    if (
+        !appendString(
+            name,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    if (
+        !appendString(
+            info,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    CrsfFrameEncoder encoder;
+
+
+    return
+        encoder.encodeExtended(
+            Crsf::SYNC_BYTE,
+            Crsf::FRAME_PARAMETER_SETTINGS_ENTRY,
+            request.origin,
+            localAddress,
+            payload,
+            payloadIndex,
+            output,
+            outputCapacity,
+            outputLength
+        );
+}
+
+
 bool CrsfDevice::buildCommandParameterResponse(
     uint8_t destination,
     uint8_t origin,

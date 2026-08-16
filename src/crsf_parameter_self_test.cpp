@@ -172,6 +172,10 @@ namespace
             BridgeParameters::
                 AUX4_INVERSION_PARAMETER,
             BridgeParameters::
+                RC_LINK_INFO_PARAMETER,
+            BridgeParameters::
+                FAILSAFE_COUNT_INFO_PARAMETER,
+            BridgeParameters::
                 RESTORE_DEFAULTS_PARAMETER,
             0xFF
         };
@@ -650,15 +654,391 @@ namespace
         return
             configuration.roll.inverted;
     }
+
+    bool runRcLinkInfoTest()
+    {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeState state;
+        state.reset();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+        parameters.attachBridgeState(
+            state
+        );
+
+
+        uint8_t frame[64] = {};
+        size_t frameLength = 0;
+
+
+        CrsfParameterRead request;
+
+        request.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        request.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        request.parameterNumber =
+            BridgeParameters::
+                RC_LINK_INFO_PARAMETER;
+
+        request.chunkNumber = 0;
+
+
+        // Cold state => Waiting.
+        if (
+            !parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength
+            ) ||
+            frame[2] !=
+                Crsf::FRAME_PARAMETER_SETTINGS_ENTRY ||
+            frame[5] !=
+                BridgeParameters::
+                    RC_LINK_INFO_PARAMETER ||
+            frame[8] !=
+                Crsf::PARAMETER_TYPE_INFO
+        )
+        {
+            return false;
+        }
+
+
+        // INFO body is "RC Link\0Waiting\0".
+        constexpr uint8_t expectedWaiting[] =
+        {
+            'R','C',' ','L','i','n','k',0,
+            'W','a','i','t','i','n','g',0
+        };
+
+
+        for (
+            size_t index = 0;
+            index < sizeof(expectedWaiting);
+            ++index
+        )
+        {
+            if (
+                frame[9 + index] !=
+                expectedWaiting[index]
+            )
+            {
+                return false;
+            }
+        }
+
+
+        // One valid RC frame => Active.
+        state.noteRcFrame(
+            100
+        );
+
+        frameLength = 0;
+
+
+        if (
+            !parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        constexpr uint8_t expectedActive[] =
+        {
+            'R','C',' ','L','i','n','k',0,
+            'A','c','t','i','v','e',0
+        };
+
+
+        for (
+            size_t index = 0;
+            index < sizeof(expectedActive);
+            ++index
+        )
+        {
+            if (
+                frame[9 + index] !=
+                expectedActive[index]
+            )
+            {
+                return false;
+            }
+        }
+
+
+        // RC timeout => Lost.
+        if (
+            !state.updateRcTimeout(
+                700,
+                500
+            )
+        )
+        {
+            return false;
+        }
+
+
+        frameLength = 0;
+
+
+        if (
+            !parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        constexpr uint8_t expectedLost[] =
+        {
+            'R','C',' ','L','i','n','k',0,
+            'L','o','s','t',0
+        };
+
+
+        for (
+            size_t index = 0;
+            index < sizeof(expectedLost);
+            ++index
+        )
+        {
+            if (
+                frame[9 + index] !=
+                expectedLost[index]
+            )
+            {
+                return false;
+            }
+        }
+
+
+        // INFO is read-only.
+        CrsfParameterWrite writeRequest;
+
+        writeRequest.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        writeRequest.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        writeRequest.parameterNumber =
+            BridgeParameters::
+                RC_LINK_INFO_PARAMETER;
+
+        writeRequest.dataLength = 1;
+        writeRequest.data[0] = 1;
+
+
+        BridgeParameterWriteResult result;
+
+        frameLength = 123;
+
+
+        return
+            !parameters.handleWrite(
+                writeRequest,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength,
+                result
+            ) &&
+            frameLength == 0 &&
+            result.change ==
+                BridgeParameterChange::None;
+    }
+
+
+    bool runFailsafeCountInfoTest()
+    {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeState state;
+        state.reset();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+        parameters.attachBridgeState(
+            state
+        );
+
+
+        CrsfParameterRead request;
+
+        request.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        request.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        request.parameterNumber =
+            BridgeParameters::
+                FAILSAFE_COUNT_INFO_PARAMETER;
+
+        request.chunkNumber = 0;
+
+
+        uint8_t frame[64] = {};
+        size_t frameLength = 0;
+
+
+        if (
+            !parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength
+            ) ||
+            frame[5] !=
+                BridgeParameters::
+                    FAILSAFE_COUNT_INFO_PARAMETER ||
+            frame[8] !=
+                Crsf::PARAMETER_TYPE_INFO
+        )
+        {
+            return false;
+        }
+
+
+        // INFO body: "Failsafe Count\0" + "0\0"
+        constexpr uint8_t expectedZero[] =
+        {
+            'F','a','i','l','s','a','f','e',' ',
+            'C','o','u','n','t',0,
+            '0',0
+        };
+
+
+        for (
+            size_t index = 0;
+            index < sizeof(expectedZero);
+            ++index
+        )
+        {
+            if (
+                frame[9 + index] !=
+                expectedZero[index]
+            )
+            {
+                return false;
+            }
+        }
+
+
+        state.noteRcFrame(
+            100
+        );
+
+
+        if (
+            !state.updateRcTimeout(
+                700,
+                500
+            )
+        )
+        {
+            return false;
+        }
+
+
+        frameLength = 0;
+
+
+        if (
+            !parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        constexpr uint8_t expectedOne[] =
+        {
+            'F','a','i','l','s','a','f','e',' ',
+            'C','o','u','n','t',0,
+            '1',0
+        };
+
+
+        for (
+            size_t index = 0;
+            index < sizeof(expectedOne);
+            ++index
+        )
+        {
+            if (
+                frame[9 + index] !=
+                expectedOne[index]
+            )
+            {
+                return false;
+            }
+        }
+
+
+        // Recovery must not erase the historical count.
+        state.noteRcFrame(
+            800
+        );
+
+
+        frameLength = 0;
+
+
+        return
+            parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength
+            ) &&
+            frame[9 + 15] == '1';
+    }
+
 }
 
 
 bool CrsfParameterSelfTest::run()
 {
     return
-        BridgeParameters::PARAMETER_COUNT == 9 &&
+        BridgeParameters::PARAMETER_COUNT == 11 &&
         runRootFolderResponseTest() &&
         runAllInversionEntriesTest() &&
         runAllInversionWritesTest() &&
+        runRcLinkInfoTest() &&
+        runFailsafeCountInfoTest() &&
         runRestoreDefaultsRegressionTest();
 }

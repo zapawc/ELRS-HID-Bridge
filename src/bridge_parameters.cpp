@@ -1,5 +1,7 @@
 #include "bridge_parameters.h"
 
+#include <stdio.h>
+
 #include "crsf_protocol.h"
 
 
@@ -11,6 +13,15 @@ BridgeParameters::BridgeParameters(
         configuration
     )
 {
+}
+
+
+void BridgeParameters::attachBridgeState(
+    const BridgeState& state
+)
+{
+    bridgeState =
+        &state;
 }
 
 
@@ -192,6 +203,8 @@ bool BridgeParameters::buildReadResponse(
                 AUX2_INVERSION_PARAMETER,
                 AUX3_INVERSION_PARAMETER,
                 AUX4_INVERSION_PARAMETER,
+                RC_LINK_INFO_PARAMETER,
+                FAILSAFE_COUNT_INFO_PARAMETER,
                 RESTORE_DEFAULTS_PARAMETER
             };
 
@@ -252,6 +265,77 @@ bool BridgeParameters::buildReadResponse(
                     outputCapacity,
                     outputLength
                 );
+        }
+
+
+        case RC_LINK_INFO_PARAMETER:
+        {
+            const char* value =
+                "Waiting";
+
+
+            if (
+                bridgeState != nullptr &&
+                bridgeState->hasRcFrames()
+            )
+            {
+                value =
+                    bridgeState->isReceiverLost()
+                        ? "Lost"
+                        : "Active";
+            }
+
+
+            return
+                responseBuilder
+                    .buildInfoParameterResponse(
+                        request,
+                        localAddress,
+                        RC_LINK_INFO_PARAMETER,
+                        ROOT_PARAMETER,
+                        "RC Link",
+                        value,
+                        output,
+                        outputCapacity,
+                        outputLength
+                    );
+        }
+
+
+        case FAILSAFE_COUNT_INFO_PARAMETER:
+        {
+            char value[16] = {};
+
+
+            const uint32_t count =
+                bridgeState != nullptr
+                    ? bridgeState->failsafeCount()
+                    : 0;
+
+
+            snprintf(
+                value,
+                sizeof(value),
+                "%lu",
+                static_cast<unsigned long>(
+                    count
+                )
+            );
+
+
+            return
+                responseBuilder
+                    .buildInfoParameterResponse(
+                        request,
+                        localAddress,
+                        FAILSAFE_COUNT_INFO_PARAMETER,
+                        ROOT_PARAMETER,
+                        "Failsafe Count",
+                        value,
+                        output,
+                        outputCapacity,
+                        outputLength
+                    );
         }
 
 
@@ -752,6 +836,14 @@ bool BridgeParameters::handleWrite(
                     outputLength,
                     result
                 );
+        }
+
+
+        case RC_LINK_INFO_PARAMETER:
+        case FAILSAFE_COUNT_INFO_PARAMETER:
+        {
+            // INFO parameters are read-only.
+            return false;
         }
 
 

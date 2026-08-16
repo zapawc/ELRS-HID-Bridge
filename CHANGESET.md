@@ -1,15 +1,20 @@
-# ELRS-HID-Bridge — Checkpoint 8 Isolation: No Throttle Inversion
+# ELRS-HID-Bridge — Checkpoint 9 Revision: RC Link + Failsafe Count
 
-## Purpose
+## Why this revision
 
-This is an isolation build to test whether the long ExpressLRS parameter-loading
-pause is specifically associated with the Throttle Inversion parameter.
+The first Checkpoint 9 build loaded the menu immediately, proving that the
+single short CRSF INFO field did not reproduce the earlier parameter-loading
+delay.
 
-Throttle Inversion is removed from the CRSF device menu and parameter policy.
-The underlying throttle mapping remains at its normal BridgeConfiguration
-default and is otherwise unchanged.
+However, `RC Link = Lost` cannot be directly inspected while the transmitter is
+off because the ExpressLRS Lua device connection itself depends on that link.
 
-## Parameter order
+This revision adds one additional read-only field that remains useful after the
+link recovers:
+
+**Failsafe Count**
+
+## Menu order
 
 1. LED Brightness
 2. Pitch Inversion
@@ -19,62 +24,104 @@ default and is otherwise unchanged.
 6. Aux 2 Inversion
 7. Aux 3 Inversion
 8. Aux 4 Inversion
-9. Restore Defaults
+9. RC Link
+10. Failsafe Count
+11. Restore Defaults
 
-Parameter count: 9.
+## RC Link
+
+Unchanged:
+
+- Waiting
+- Active
+- Lost
+
+It is still useful for normal linked-state display and internal/self-test
+coverage, even though Lost cannot practically be viewed through Lua while the
+RF control link itself is absent.
+
+## Failsafe Count
+
+CRSF type:
+
+`INFO`
+
+Value:
+
+decimal count from `BridgeState::failsafeCount()`.
+
+The existing BridgeState increments this count only when the RC timeout
+transitions into receiver-lost/failsafe state.
+
+Recovery does not erase the count.
+
+The counter is runtime diagnostic state and is not persisted across bridge
+power cycles.
+
+## Practical hardware test
+
+1. Power bridge and transmitter normally.
+2. Open ELRS-HID-Bridge.
+3. Confirm:
+   - RC Link = Active
+   - note the current Failsafe Count.
+4. Exit the Lua device page if necessary.
+5. Turn the transmitter off.
+6. Wait long enough for the bridge's normal failsafe timeout.
+7. Turn the transmitter back on.
+8. Wait for ELRS to reconnect.
+9. Reopen ELRS-HID-Bridge.
+10. Confirm:
+    - RC Link = Active
+    - Failsafe Count increased by exactly one.
+
+Repeat once if desired. Each actual transition into receiver-lost should add
+one; remaining disconnected should not continuously increment the counter.
+
+## Menu loading test
+
+The device page should still populate promptly.
+
+If adding Failsafe Count reintroduces a long loading pause, stop there and do
+not commit this revision.
 
 ## Persistence
 
-No EEPROM schema change.
+Unchanged.
 
-Schema v2 remains unchanged. The stored throttle-inversion bit is simply not
-user-configurable in this build. Restore Defaults still resets the complete
-BridgeConfiguration object, including throttle inversion, to its normal default.
+Neither RC Link nor Failsafe Count is stored in EEPROM.
 
-## Files changed
+Configuration schema v2 remains current.
+
+## Files changed from first Checkpoint 9
 
 - `src/bridge_parameters.h`
 - `src/bridge_parameters.cpp`
 - `src/crsf_parameter_self_test.cpp`
 
-The remaining files are inherited from the clean Checkpoint 8 menu-order
-baseline.
+Other files are carried forward complete from the first Checkpoint 9 package.
 
-## Primary test
+## Self-test additions
 
-Open:
+Startup tests now verify:
 
-ExpressLRS → Other Devices → ELRS-HID-Bridge
+- Failsafe Count initially reports 0,
+- one receiver-lost transition reports 1,
+- subsequent RC recovery leaves the count at 1,
+- the INFO parameter is read-only.
 
-Watch the loading bar closely.
-
-The key question is whether the previous long pause after Roll Inversion is
-gone now that Throttle Inversion has been removed.
+## Regression test
 
 Also confirm:
 
-- all 9 fields eventually appear,
-- Restore Defaults is last,
-- Roll and Yaw inversion still work,
-- at least one Aux inversion still works,
-- persistence remains functional,
-- Restore Defaults still works,
-- HID/failsafe/reconnect behavior is unchanged.
+- Restore Defaults is still last,
+- one analog inversion still works,
+- LED Brightness still persists,
+- HID neutralizes on transmitter loss,
+- HID recovers after reconnection.
 
-## Interpretation
+## Suggested commit
 
-If the long pause disappears, Throttle Inversion is strongly isolated as the
-trigger and should remain removed until investigated separately.
+If the menu remains fast and the counter test succeeds:
 
-If the pause still occurs, the problem is more general than that parameter and
-we should investigate parameter-response timing/retries instead.
-
-## Commit guidance
-
-Treat this as diagnostic first.
-
-If it loads cleanly and you want to retain the removal:
-
-`fix: remove throttle inversion parameter`
-
-Otherwise do not commit it.
+`feat: add bridge link health info`

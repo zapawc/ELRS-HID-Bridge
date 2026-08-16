@@ -180,6 +180,19 @@ public:
     ) const;
 
 
+    bool buildInfoParameterResponse(
+        const CrsfParameterRead& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        uint8_t parentFolder,
+        const char* name,
+        const char* info,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
     // Build a stateful COMMAND Parameter Settings Entry (0x2B).
     //
     // This helper is used for both normal parameter reads and COMMAND write

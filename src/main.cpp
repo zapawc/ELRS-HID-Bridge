@@ -124,6 +124,11 @@ void setup()
     bridgeState.reset();
 
 
+    bridgeParameters.attachBridgeState(
+        bridgeState
+    );
+
+
     usbHid.begin();
 
 

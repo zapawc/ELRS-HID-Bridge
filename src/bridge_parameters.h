@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "bridge_configuration.h"
+#include "bridge_state.h"
 #include "crsf_device.h"
 
 
@@ -59,13 +60,25 @@ public:
 
     static constexpr uint8_t AUX4_INVERSION_PARAMETER = 8;
 
-    static constexpr uint8_t RESTORE_DEFAULTS_PARAMETER = 9;
+    static constexpr uint8_t RC_LINK_INFO_PARAMETER = 9;
 
-    static constexpr uint8_t PARAMETER_COUNT = 9;
+    static constexpr uint8_t FAILSAFE_COUNT_INFO_PARAMETER = 10;
+
+    static constexpr uint8_t RESTORE_DEFAULTS_PARAMETER = 11;
+
+    static constexpr uint8_t PARAMETER_COUNT = 11;
 
 
     explicit BridgeParameters(
         BridgeConfiguration& configuration
+    );
+
+
+    // Attach the existing live BridgeState after global construction.
+    //
+    // BridgeParameters never owns or mutates this state.
+    void attachBridgeState(
+        const BridgeState& state
     );
 
 
@@ -156,6 +169,8 @@ private:
 
 
     BridgeConfiguration& configuration;
+
+    const BridgeState* bridgeState = nullptr;
 
     bool restoreDefaultsConfirmationPending = false;
 };
