@@ -2,7 +2,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
 #include "crsf_decoder.h"
 #include "crsf_device.h"
 #include "crsf_frame_encoder.h"
@@ -47,7 +46,6 @@ namespace
             crc ^=
                 data[index];
 
-
             for (
                 uint8_t bit = 0;
                 bit < 8;
@@ -68,7 +66,6 @@ namespace
                 }
             }
         }
-
 
         return crc;
     }
@@ -99,7 +96,6 @@ namespace
             0x54
         };
 
-
         CrsfDecoder decoder;
 
 
@@ -127,7 +123,6 @@ namespace
         {
             return false;
         }
-
 
         if (
             ping.destination !=
@@ -183,7 +178,6 @@ namespace
             CrsfFrameEncoder::MAX_FRAME_SIZE
         ] = {};
 
-
         size_t frameLength = 0;
 
 
@@ -206,7 +200,6 @@ namespace
 
 
         CrsfDecoder decoder;
-
 
         feedFrame(
             decoder,
@@ -232,7 +225,6 @@ namespace
         {
             return false;
         }
-
 
         if (
             ping.destination !=
@@ -329,7 +321,6 @@ namespace
             Crsf::FRAME_DEVICE_INFO,
 
             Crsf::ADDRESS_REMOTE_CONTROL,
-
             Crsf::ADDRESS_FLIGHT_CONTROLLER,
 
             0x00
@@ -361,6 +352,367 @@ namespace
 
         return true;
     }
+
+
+    bool runBroadcastDeviceInfoResponseTest()
+    {
+        // A broadcast ping should produce a Device Info response back
+        // to the ping origin.
+        //
+        // Identity values are test vectors only. Production identity
+        // remains a caller-supplied policy decision at this checkpoint.
+
+        CrsfDevicePing ping;
+
+        ping.frameAddress =
+            Crsf::ADDRESS_TRANSMITTER;
+
+        ping.destination =
+            Crsf::ADDRESS_BROADCAST;
+
+        ping.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+
+        CrsfDeviceIdentity identity;
+
+        identity.name =
+            "ELRS-HID-Bridge";
+
+        identity.serialNumber =
+            0x01020304;
+
+        identity.hardwareId =
+            0x11223344;
+
+        identity.firmwareId =
+            0x55667788;
+
+        identity.parameterCount = 0;
+        identity.parameterVersion = 1;
+
+
+        uint8_t frame[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t frameLength = 0;
+
+
+        CrsfDevice device;
+
+
+        if (
+            !device.buildDeviceInfoResponse(
+                ping,
+                Crsf::ADDRESS_USB,
+                identity,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        constexpr char expectedName[] =
+            "ELRS-HID-Bridge";
+
+        constexpr size_t expectedNameLength =
+            sizeof(expectedName) - 1;
+
+        constexpr size_t fixedFieldsLength = 14;
+
+        constexpr size_t expectedPayloadLength =
+            expectedNameLength +
+            1 +
+            fixedFieldsLength;
+
+        constexpr size_t expectedFrameLength =
+            expectedPayloadLength +
+            6;
+
+
+        if (
+            frameLength !=
+            expectedFrameLength
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            frame[0] !=
+                Crsf::SYNC_BYTE ||
+            frame[1] !=
+                static_cast<uint8_t>(
+                    expectedPayloadLength + 4
+                ) ||
+            frame[2] !=
+                Crsf::FRAME_DEVICE_INFO ||
+            frame[3] !=
+                Crsf::ADDRESS_REMOTE_CONTROL ||
+            frame[4] !=
+                Crsf::ADDRESS_USB
+        )
+        {
+            return false;
+        }
+
+
+        for (
+            size_t index = 0;
+            index < expectedNameLength;
+            ++index
+        )
+        {
+            if (
+                frame[5 + index] !=
+                static_cast<uint8_t>(
+                    expectedName[index]
+                )
+            )
+            {
+                return false;
+            }
+        }
+
+
+        // Device_name must be null-terminated before the numeric fields.
+        if (
+            frame[
+                5 +
+                expectedNameLength
+            ] != 0
+        )
+        {
+            return false;
+        }
+
+
+        const size_t identityOffset =
+            5 +
+            expectedNameLength +
+            1;
+
+
+        constexpr uint8_t expectedIdentityBytes[] =
+        {
+            0x01, 0x02, 0x03, 0x04,
+            0x11, 0x22, 0x33, 0x44,
+            0x55, 0x66, 0x77, 0x88,
+            0x00,
+            0x01
+        };
+
+
+        for (
+            size_t index = 0;
+            index < sizeof(expectedIdentityBytes);
+            ++index
+        )
+        {
+            if (
+                frame[
+                    identityOffset + index
+                ] !=
+                expectedIdentityBytes[index]
+            )
+            {
+                return false;
+            }
+        }
+
+
+        const size_t crcIndex =
+            frameLength - 1;
+
+
+        const uint8_t expectedCrc =
+            crc8DvbS2(
+                &frame[2],
+                frameLength - 3
+            );
+
+
+        if (
+            frame[crcIndex] !=
+            expectedCrc
+        )
+        {
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    bool runAddressedDeviceInfoResponseTest()
+    {
+        CrsfDevicePing ping;
+
+        ping.frameAddress =
+            Crsf::SYNC_BYTE;
+
+        ping.destination =
+            Crsf::ADDRESS_USB;
+
+        ping.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+
+        CrsfDeviceIdentity identity;
+
+        identity.name =
+            "Bridge";
+
+
+        uint8_t frame[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t frameLength = 0;
+
+
+        CrsfDevice device;
+
+
+        if (
+            !device.buildDeviceInfoResponse(
+                ping,
+                Crsf::ADDRESS_USB,
+                identity,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            frameLength == 0 ||
+            frame[3] !=
+                Crsf::ADDRESS_REMOTE_CONTROL ||
+            frame[4] !=
+                Crsf::ADDRESS_USB
+        )
+        {
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    bool runUnrelatedDestinationTest()
+    {
+        CrsfDevicePing ping;
+
+        ping.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        ping.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+
+        CrsfDeviceIdentity identity;
+
+        identity.name =
+            "ELRS-HID-Bridge";
+
+
+        uint8_t frame[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t frameLength = 123;
+
+
+        CrsfDevice device;
+
+
+        if (
+            device.buildDeviceInfoResponse(
+                ping,
+                Crsf::ADDRESS_USB,
+                identity,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        if (frameLength != 0)
+        {
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    bool runInvalidIdentityTest()
+    {
+        CrsfDevicePing ping;
+
+        ping.destination =
+            Crsf::ADDRESS_BROADCAST;
+
+        ping.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+
+        CrsfDeviceIdentity identity;
+
+        identity.name = nullptr;
+
+
+        uint8_t frame[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t frameLength = 123;
+
+
+        CrsfDevice device;
+
+
+        if (
+            device.buildDeviceInfoResponse(
+                ping,
+                Crsf::ADDRESS_USB,
+                identity,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        if (frameLength != 0)
+        {
+            return false;
+        }
+
+
+        return true;
+    }
 }
 
 
@@ -385,6 +737,30 @@ bool CrsfDeviceSelfTest::run()
 
 
     if (!runNonPingFrameTest())
+    {
+        return false;
+    }
+
+
+    if (!runBroadcastDeviceInfoResponseTest())
+    {
+        return false;
+    }
+
+
+    if (!runAddressedDeviceInfoResponseTest())
+    {
+        return false;
+    }
+
+
+    if (!runUnrelatedDestinationTest())
+    {
+        return false;
+    }
+
+
+    if (!runInvalidIdentityTest())
     {
         return false;
     }

@@ -1,72 +1,129 @@
 # CRSF Protocol Notes
 
-**Version:** 0.2  
-**Status:** Draft
+**Status:** Active pre-v1.0 implementation notes  
+**Updated:** August 2026
 
----
+## 1. Supported Protocol
 
-## Supported Protocol
-
-Current development targets the Team BlackSheep Crossfire (CRSF) serial protocol as implemented by ExpressLRS receivers.
+ELRS-HID-Bridge targets the Team BlackSheep Crossfire (CRSF) serial protocol as implemented by ExpressLRS receivers.
 
 Official specification:
 
 https://github.com/tbs-fpv/tbs-crsf-spec
 
----
+Reference UART configuration:
 
-## Current Frame Support
-
-| Frame | Description | Status |
-|--------|-------------|--------|
-| 0x16 | RC Channels | In Progress |
-| 0x14 | Link Statistics | Planned |
-
-Additional frame types will be added as needed.
-
----
-
-## Frame Structure
-
+```text
+420000 baud
 ```
+
+---
+
+## 2. Current Frame Support
+
+| Frame | Description | Current status |
+|---|---|---|
+| `0x14` | Link Statistics | Decoded and used for diagnostics only |
+| `0x16` | RC Channels Packed | Decoded; primary HID control source |
+| `0x28` | Parameter Ping Devices / Device Ping | Recognized and routed to `CrsfDevice` |
+| `0x29` | Parameter Device Information / Device Info | Response construction implemented and self-tested; live TX not enabled |
+| `0x2B` | Parameter Settings Entry | Defined for future work; not implemented |
+| `0x2C` | Parameter Read | Defined for future work; not implemented |
+| `0x2D` | Parameter Write | Defined for future work; not implemented |
+| `0x32` | Command | Defined for future work; not implemented |
+
+Unsupported but structurally valid frame types are intentionally ignored by the dispatcher.
+
+---
+
+## 3. Frame Structure
+
+### Broadcast frame
+
+```text
 +---------+--------+------+---------+------+
-| Address | Length | Type | Payload | CRC  |
+| Sync    | Length | Type | Payload | CRC  |
 +---------+--------+------+---------+------+
 ```
 
-The CRC is calculated over:
+### Extended-header frame
 
-```
-Type + Payload
+```text
++---------+--------+------+-------------+--------+---------+------+
+| Sync    | Length | Type | Destination | Origin | Payload | CRC  |
++---------+--------+------+-------------+--------+---------+------+
 ```
 
-The Address and Length bytes are excluded from the CRC calculation.
+CRSF frames are at most 64 bytes including Sync and CRC.
+
+The Length byte represents the number of bytes after Sync and Length:
+
+```text
+Broadcast:
+Type + Payload + CRC
+
+Extended:
+Type + Destination + Origin + Payload + CRC
+```
+
+Valid CRSF length range:
+
+```text
+2 .. 62
+```
 
 ---
 
-## CRC
+## 4. Synchronization / Address Handling
+
+The implementation no longer assumes that every valid frame begins only with `0xC8`.
+
+`CrsfParser` validates frame-start bytes against known CRSF serial/device address values defined in `crsf_protocol.h`.
+
+Important CRSF addresses currently represented include:
+
+```text
+0x00 Broadcast
+0x10 USB Device
+0xC8 Flight Controller / traditional serial sync
+0xEA Remote Control
+0xEC Receiver
+0xEE Transmitter
+```
+
+The official CRSF specification permits the serial sync byte, broadcast address, or a device address to appear as the first byte of a received frame.
+
+---
+
+## 5. CRC
 
 Polynomial:
 
-```
+```text
 0xD5
 ```
 
-Current implementation uses a software CRC calculator.
+The normal CRSF frame CRC covers bytes beginning at Type and ending at the final payload byte.
+
+Therefore:
+
+```text
+Broadcast CRC input:
+Type + Payload
+
+Extended-frame CRC input:
+Type + Destination + Origin + Payload
+```
+
+Sync/Address and Length are excluded from the CRC calculation.
 
 ---
 
-## RC Channel Frame
+## 6. RC Channels (`0x16`)
 
-Frame Type:
+Payload size:
 
-```
-0x16
-```
-
-Payload Size:
-
-```
+```text
 22 bytes
 ```
 
@@ -74,59 +131,281 @@ Encoding:
 
 - 16 channels
 - 11 bits per channel
-- Packed consecutively
-- Little-endian bit ordering
+- packed consecutively
+- explicit unpacking in firmware
 
-Typical channel values:
+Reference CRSF values commonly used by the project:
 
 | Value | Meaning |
-|------:|---------|
+|---:|---|
 | 172 | Minimum |
 | 992 | Center |
 | 1811 | Maximum |
 
+The firmware does not use compiler-dependent packed C/C++ bitfields for this payload.
+
+### Processing path
+
+```text
+CrsfParser
+    |
+CrsfDispatcher
+    |
+RcChannelDecoder
+    |
+RawChannels
+    |
+ChannelNormalizer
+    |
+NormalizedChannels
+    |
+ChannelMapper
+    |
+ChannelState
+    |
+UsbHid
+```
+
+Receipt of a valid `0x16` frame is the primary fact used to maintain RC-active state.
+
 ---
 
-## Internal Processing
+## 7. Link Statistics (`0x14`)
 
-Incoming CRSF data flows through the following stages:
+Link Statistics are decoded for diagnostics such as Link Quality, RSSI, and SNR.
 
-```
-UART
+Architecture rule:
 
-↓
-
-Frame Assembly
-
-↓
-
-CRC Validation
-
-↓
-
-Frame Dispatch
-
-↓
-
-RC Channel Decode
-
-↓
-
-RawChannels
-
-↓
-
-Channel Normalization
-
-↓
-
-Application Mapping
-
-↓
-
-USB HID
+```text
+Link Statistics received != RC control healthy
 ```
 
-Only the protocol layer understands CRSF-specific details.
+The RP2 has been observed continuing to emit `0x14` after valid RC Channels frames stopped during transmitter loss.
 
-All higher layers remain protocol independent.
+Therefore Link Statistics cannot reset or override the RC timeout/failsafe state.
+
+---
+
+## 8. Device Ping (`0x28`)
+
+`0x28` is an extended-header frame.
+
+Routing fields:
+
+```text
+Destination
+Origin
+```
+
+The official CRSF Device Ping has no defined application payload.
+
+The current `CrsfDevice` handler requires at least Destination and Origin and tolerates additional trailing bytes for compatibility/protocol investigation.
+
+A ping may target:
+
+- `0x00` Broadcast, or
+- one specific CRSF device address.
+
+Current production behavior:
+
+```text
+Device Ping recognized
+    ->
+routing retained
+    ->
+main loop consumes/clears ping
+    ->
+no live response transmitted yet
+```
+
+---
+
+## 9. Device Info (`0x29`)
+
+The official Device Info payload is:
+
+```text
+char[]   Device_name             // null-terminated
+uint32_t Serial_number
+uint32_t Hardware_ID
+uint32_t Firmware_ID
+uint8_t  Parameters_total
+uint8_t  Parameter_version_number
+```
+
+CRSF uses big-endian byte ordering for multi-byte values.
+
+### Current implementation checkpoint
+
+`CrsfDevice::buildDeviceInfoResponse()` constructs a complete extended Device Info frame but does not transmit it.
+
+Inputs:
+
+- recognized `CrsfDevicePing`
+- caller-supplied local CRSF device address
+- caller-supplied `CrsfDeviceIdentity`
+- caller output buffer/capacity
+
+Current response policy:
+
+```text
+if ping destination == Broadcast
+    respond
+else if ping destination == local device address
+    respond
+else
+    do not construct a response
+```
+
+Response routing:
+
+```text
+Destination = ping Origin
+Origin      = local device address
+```
+
+Frame construction:
+
+```text
+Sync = 0xC8 serial sync
+Type = 0x29 Device Info
+Destination = ping origin
+Origin = caller-supplied local address
+Payload = Device Info fields
+CRC = DVB-S2 CRSF CRC over Type through payload
+```
+
+### Why address/identity are caller supplied
+
+The project has not yet validated the final live device address/identity policy through the RP2/Ranger/EdgeTX path.
+
+The construction layer therefore avoids hard-coding a permanent bridge address or fake production identifiers merely to complete the encoding test.
+
+The next hardware step will determine which address/routing behavior EdgeTX actually accepts before that policy is committed.
+
+---
+
+## 10. Device Info Self-Test Coverage
+
+Startup tests now verify:
+
+- known valid Device Ping recognition
+- extra Device Ping trailing-byte tolerance
+- rejection of malformed Device Ping lacking routing fields
+- non-Ping frames are not surfaced as Device Ping
+- broadcast ping -> Device Info construction
+- directly addressed ping -> Device Info construction
+- unrelated destination -> no response construction
+- response Destination = ping Origin
+- response Origin = local address
+- null-terminated `Device_name`
+- big-endian 32-bit identity fields
+- parameter count/version placement
+- CRSF Length field
+- CRSF CRC
+
+These tests are deterministic and do not transmit on the live UART.
+
+---
+
+## 11. Outbound Extended-Frame Encoder
+
+`CrsfFrameEncoder` owns generic extended-header frame construction.
+
+It receives:
+
+- sync/address byte
+- frame type
+- destination
+- origin
+- payload pointer/length
+- output buffer/capacity
+
+It validates frame sizing/capacity, writes the extended header, copies the payload, computes CRC, and returns the complete frame length.
+
+`CrsfDevice` uses this encoder rather than implementing a second frame/CRC path.
+
+---
+
+## 12. Current Bidirectional Boundary
+
+The reference wiring includes both UART directions:
+
+```text
+RP2 TX -> QT Py RX
+RP2 RX <- QT Py TX
+```
+
+`CrsfUart` provides both receive and transmit primitives.
+
+However:
+
+> TX capability existing in the transport does not mean the current production firmware is already transmitting CRSF Device Info.
+
+The next checkpoint is specifically to connect the already-tested Device Info frame to the live TX primitive and observe real routing/discovery behavior.
+
+---
+
+## 13. ExpressLRS Channel-Resolution Observation
+
+Reference testing moved from 250 Hz Wide to:
+
+```text
+333 Hz Full
+16ch Rate/2
+```
+
+This allowed CH13 and CH14 to behave proportionally.
+
+With the tested ExpressLRS 3.3.1 receiver firmware, CH15/CH16 remained high. Diagnostic remapping showed this follows the CRSF channels rather than HID axes.
+
+No protocol/HID workaround is currently implemented.
+
+---
+
+## 14. Protocol State vs Application State
+
+CRSF decoders provide protocol facts.
+
+`BridgeState` and higher-level application code determine operational state.
+
+Examples:
+
+```text
+valid 0x16 received
+    -> RC frame fact
+    -> refresh RC-active timeout
+
+valid 0x14 received
+    -> Link Statistics fact
+    -> update diagnostics only
+
+0x16 absent for 500 ms
+    -> receiver timeout
+    -> FailsafePolicy applied
+```
+
+This separation is a core safety/maintainability rule.
+
+---
+
+## 15. Planned Protocol Work
+
+Immediate:
+
+1. wire Device Info response construction to `CrsfUart::write()`,
+2. use a controlled temporary address/identity for hardware discovery testing,
+3. verify RP2/Ranger/EdgeTX routing,
+4. verify RC/HID/failsafe behavior is unchanged,
+5. document the observed routing behavior.
+
+Post-v1.0 candidates:
+
+- CRSF parameter entries (`0x2B`)
+- parameter reads (`0x2C`)
+- parameter writes (`0x2D`)
+- commands (`0x32`) where justified
+- bridge health information
+- persistent configuration integration
+
+Do not build the full parameter system until identity-only discovery has been proven.
