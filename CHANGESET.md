@@ -1,109 +1,146 @@
-# ELRS-HID-Bridge — Post-v1.0 Checkpoint 3
+# ELRS-HID-Bridge — Post-v1.0 Checkpoint 4
 
 ## Intent
 
-Refactor the proven CRSF parameter proof of concept into a small reusable
-parameter seam **without changing user-visible behavior**.
+Add one second real CRSF/EdgeTX configuration parameter using the parameter
+architecture validated in Checkpoint 3.
 
-Checkpoint 2 proved that EdgeTX can discover, read, edit, and write the
-runtime LED Brightness CRSF FLOAT parameter on real hardware.
+New parameter:
 
-This checkpoint moves parameter-specific policy out of `main.cpp` before a
-second setting is introduced.
+**Pitch Inversion**
 
-## New component
+Options:
 
-`BridgeParameters` now owns:
+- `Normal`
+- `Inverted`
 
-- parameter IDs,
-- parameter count,
-- root-folder membership,
-- parameter names,
-- CRSF parameter types,
-- ranges/defaults/steps,
-- the ExpressLRS Lua r18 blank-unit compatibility behavior,
-- parameter read-response construction,
-- parameter write validation,
-- updates to `BridgeConfiguration`,
-- write acknowledgement construction.
+The current validated v1.0 behavior remains the default:
 
-`main.cpp` remains responsible for application-side effects and transport:
+**Inverted**
 
-- receive the captured request from `CrsfDecoder`,
-- ask `BridgeParameters` to process it,
-- apply the returned LED-brightness side effect,
-- transmit the already-built CRSF response.
+This checkpoint remains runtime-only. Persistence is intentionally deferred.
 
-This deliberately avoids a generic callback/template/persistence framework.
+## Why this parameter
 
-## User-visible behavior
+LED Brightness proved:
 
-There should be **no intentional behavior change** from validated Checkpoint 2.
+CRSF FLOAT → BridgeConfiguration → hardware presentation
 
-EdgeTX should still show approximately:
+Pitch Inversion now proves a different path:
 
-`LED Brightness    10`
+CRSF TEXT_SELECTION → BridgeConfiguration → HID mapping
 
-The parameter remains:
+That exercises the parameter abstraction with a second CRSF data type and a
+different application subsystem without broadening scope.
 
-- CRSF `FLOAT`,
-- range 0–100,
-- precision 0,
-- step 1,
-- runtime-only,
-- blank unit string for ExpressLRS Lua r18 compatibility.
+## CRSF representation
 
-The physical LED should still update immediately when the value changes.
+Parameter list:
 
-Reboot should still restore the default value of 10.
+- Parameter `0` — `ROOT`
+- Parameter `1` — `LED Brightness`
+- Parameter `2` — `Pitch Inversion`
 
-## Device Info consistency
+`Pitch Inversion` uses standard CRSF `TEXT_SELECTION` (`0x09`).
 
-`BridgeIdentity::CRSF_PARAMETER_COUNT` now derives from:
+Wire definition:
 
-`BridgeParameters::PARAMETER_COUNT`
+- Name: `Pitch Inversion`
+- Options: `Normal;Inverted`
+- Value:
+  - `0` = Normal
+  - `1` = Inverted
+- Min: `0`
+- Max: `1`
+- Default: `1`
+- Unit: empty string
 
-This prevents Device Info metadata from drifting away from the actual parameter
-component as additional parameters are introduced later.
+TEXT_SELECTION writes use the standard one-byte selection index.
 
-## Files added
+Accepted writes are acknowledged with `0x2D` containing:
 
-- `src/bridge_parameters.h`
-- `src/bridge_parameters.cpp`
+- parameter number
+- accepted one-byte selection index
+
+## Runtime behavior
+
+`BridgeConfiguration::pitch.inverted` is updated immediately.
+
+`ChannelMapper` already references `BridgeConfiguration`, so no mapper rebuild
+or additional state synchronization is required. The changed inversion setting
+is used on the next decoded RC channel frame.
+
+No other axis mapping changes.
+
+## Default behavior
+
+The bridge still boots with:
+
+`Pitch Inversion = Inverted`
+
+This preserves the previously hardware-validated HID orientation:
+
+- Roll — normal
+- Pitch — inverted
+- Throttle — normal
+- Yaw — normal
+
+Merely flashing this checkpoint should therefore not change normal joystick
+behavior.
 
 ## Files changed
 
+- `src/crsf_device.h`
+- `src/crsf_device.cpp`
+- `src/bridge_parameters.h`
+- `src/bridge_parameters.cpp`
 - `src/main.cpp`
-- `src/bridge_identity.h`
 - `src/crsf_parameter_self_test.cpp`
 
-`src/crsf_parameter_self_test.h` is included as a complete replacement file for
-checkpoint consistency but has no behavioral change.
+## CRSF device additions
+
+`CrsfDevice` gains protocol-level helpers for:
+
+- TEXT_SELECTION parameter-entry construction
+- one-byte TEXT_SELECTION write acknowledgement
+
+Bridge-specific names/options/defaults remain in `BridgeParameters`.
+
+## Parameter architecture proof
+
+`BridgeParameters::PARAMETER_COUNT` increases from 1 to 2.
+
+Because Device Info already derives its count from `BridgeParameters`, no
+separate Device Info count edit is required.
+
+The root folder now advertises both parameters.
 
 ## Self-test coverage
 
-The CRSF parameter startup self-test now exercises the new abstraction directly:
+Startup CRSF parameter tests now cover:
 
-- CRSF Parameter Read capture through decoder/dispatcher,
-- root-folder response,
-- LED Brightness FLOAT response,
-- current runtime value reflected in reads,
-- valid write updates `BridgeConfiguration`,
-- valid write produces the expected acknowledgement,
-- out-of-range write is rejected without modifying configuration,
-- wrong-address read is rejected,
-- parameter count remains one.
+- parameter count = 2
+- root folder contains parameters 1 and 2
+- LED Brightness still produces a FLOAT entry
+- Pitch Inversion produces a TEXT_SELECTION entry
+- option text is `Normal;Inverted`
+- current/default selection is Inverted
+- valid write to Normal updates configuration and produces acknowledgement
+- valid write back to Inverted updates configuration and produces acknowledgement
+- invalid selection index is rejected without modifying configuration
+- wrong-address requests remain rejected
 
 ## Intentionally unchanged
 
-- CRSF wire representation of the validated LED parameter
-- blank unit workaround for ExpressLRS Lua r18
-- HID mapping
-- HID axis orientation
+- LED Brightness behavior
+- ExpressLRS Lua r18 blank-unit workaround for LED Brightness
+- channel assignments
+- all non-pitch axis orientation
+- switch/button mappings
 - receiver timeout
 - failsafe policy
 - Link Statistics behavior
-- BOOT-button maintenance behavior
+- BOOT-button behavior
 - USB descriptors
 - persistence
 - board support
@@ -120,52 +157,94 @@ Use the established VS Code / PlatformIO workflow.
 4. Flash the normal build.
 5. Do not use `pico_debug`.
 
-## Hardware regression
+## Hardware test procedure
 
-### CRSF parameter
+### Baseline after flash
+
+1. Power the bridge normally.
+2. Link the transmitter.
+3. Confirm the normal green operational indication.
+4. Open `joy.cpl`.
+5. Confirm the existing validated pitch direction is unchanged after flash.
+6. Confirm all other axes and buttons still behave normally.
+
+### Parameter discovery
 
 1. Open the ExpressLRS Lua script.
 2. Open `Other Devices`.
 3. Open `ELRS-HID-Bridge`.
-4. Confirm it opens without a Lua error.
-5. Confirm `LED Brightness` appears.
-6. Confirm the initial value is 10.
-7. Change it to several values such as 25, 50, and 100.
-8. Confirm the physical LED changes immediately.
-9. Set it to 0 and confirm only the LED goes dark; HID remains functional.
-10. Return to a visible value.
-11. Power-cycle the bridge and confirm brightness returns to 10.
+4. Confirm both parameters appear:
+   - `LED Brightness`
+   - `Pitch Inversion`
+5. Confirm `Pitch Inversion` initially displays `Inverted`.
 
-### HID/failsafe smoke regression
+### Pitch Inversion — Normal
 
-1. Open `joy.cpl`.
-2. Confirm all eight analog controls operate normally.
-3. Confirm the existing button mappings remain correct.
-4. Turn the transmitter off.
-5. Confirm all analog controls neutralize and all buttons release.
-6. Turn the transmitter back on.
-7. Confirm automatic recovery.
+1. Leave `joy.cpl` visible.
+2. Change `Pitch Inversion` from `Inverted` to `Normal`.
+3. Move the pitch stick.
+4. Confirm the HID Y-axis direction reverses immediately.
+5. Confirm Roll, Throttle, Yaw, auxiliary axes, and buttons are unchanged.
+
+### Pitch Inversion — Inverted
+
+1. Change `Pitch Inversion` back to `Inverted`.
+2. Move the pitch stick.
+3. Confirm the previously validated Y-axis direction is restored.
+
+### Existing LED parameter regression
+
+1. Change LED Brightness to a visibly different value.
+2. Confirm the LED changes immediately.
+3. Confirm no Lua formatting error returns.
+
+### Volatile configuration
+
+1. Set `Pitch Inversion` to `Normal`.
+2. Power-cycle the bridge.
+3. Reopen the bridge device page.
+4. Confirm `Pitch Inversion` returns to `Inverted`.
+5. Confirm `joy.cpl` again shows the validated inverted pitch orientation.
+
+This confirms persistence has not been introduced.
+
+### Failsafe regression
+
+1. Leave `joy.cpl` open with the transmitter linked.
+2. Turn the transmitter off.
+3. Confirm all eight analog controls neutralize and all buttons release.
+4. Turn the transmitter back on.
+5. Confirm automatic recovery.
+6. Confirm the currently selected runtime pitch inversion is honored after
+   recovery.
 
 ## Success criteria
 
-Checkpoint 3 succeeds if:
+Checkpoint 4 succeeds when:
 
 - the normal `pico` build is clean,
 - startup self-tests pass,
-- the EdgeTX parameter behaves exactly as in Checkpoint 2,
-- the Lua r18 compatibility workaround remains effective,
-- HID behavior is unchanged,
-- failsafe behavior is unchanged.
+- both EdgeTX parameters are visible,
+- Pitch Inversion defaults to Inverted,
+- selecting Normal reverses only pitch,
+- selecting Inverted restores the validated orientation,
+- LED Brightness still works,
+- reboot restores Pitch Inversion to Inverted,
+- HID/failsafe behavior remains otherwise unchanged.
 
 ## Suggested commit
 
-`refactor: isolate CRSF bridge parameter policy`
+`feat: add runtime pitch inversion parameter`
 
 ## Next checkpoint
 
-After validation and commit, add **one second real parameter** using
-`BridgeParameters`.
+If this passes, the parameter abstraction has been validated with:
 
-The second parameter should be selected for low operational risk and clear
-hardware/behavioral verification. Its implementation will test whether this
-abstraction is genuinely useful before persistence is introduced.
+- two real settings,
+- two CRSF parameter types,
+- two different application subsystems.
+
+At that point, persistent configuration becomes justified. The next design
+checkpoint should define the persistence schema, validation, corruption
+fallback, versioning, and reset-to-default behavior before adding more user
+settings.

@@ -38,7 +38,7 @@ namespace
         constexpr uint8_t payload[] =
         {
             BridgeParameters::
-                LED_BRIGHTNESS_PARAMETER,
+                PITCH_INVERSION_PARAMETER,
             0x00
         };
 
@@ -94,7 +94,7 @@ namespace
                 Crsf::ADDRESS_REMOTE_CONTROL ||
             request.parameterNumber !=
                 BridgeParameters::
-                    LED_BRIGHTNESS_PARAMETER ||
+                    PITCH_INVERSION_PARAMETER ||
             request.chunkNumber != 0
         )
         {
@@ -157,7 +157,7 @@ namespace
 
 
         if (
-            frameLength < 13 ||
+            frameLength < 14 ||
             frame[2] !=
                 Crsf::FRAME_PARAMETER_SETTINGS_ENTRY ||
             frame[3] !=
@@ -184,6 +184,8 @@ namespace
             'R', 'O', 'O', 'T', 0,
             BridgeParameters::
                 LED_BRIGHTNESS_PARAMETER,
+            BridgeParameters::
+                PITCH_INVERSION_PARAMETER,
             0xFF
         };
 
@@ -262,17 +264,9 @@ namespace
             frameLength == 0 ||
             frame[2] !=
                 Crsf::FRAME_PARAMETER_SETTINGS_ENTRY ||
-            frame[3] !=
-                Crsf::ADDRESS_REMOTE_CONTROL ||
-            frame[4] !=
-                Crsf::ADDRESS_FLIGHT_CONTROLLER ||
             frame[5] !=
                 BridgeParameters::
                     LED_BRIGHTNESS_PARAMETER ||
-            frame[6] != 0 ||
-            frame[7] !=
-                BridgeParameters::
-                    ROOT_PARAMETER ||
             frame[8] !=
                 Crsf::PARAMETER_TYPE_FLOAT
         )
@@ -281,72 +275,120 @@ namespace
         }
 
 
-        constexpr char expectedName[] =
-            "LED Brightness";
-
-        constexpr size_t expectedNameLength =
-            sizeof(expectedName);
+        return true;
+    }
 
 
-        for (
-            size_t index = 0;
-            index < expectedNameLength;
-            ++index
-        )
+    bool runPitchSelectionEntryResponseTest()
+    {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        // Validated baseline is inverted.
+        if (!configuration.pitch.inverted)
         {
-            if (
-                frame[9 + index] !=
-                static_cast<uint8_t>(
-                    expectedName[index]
-                )
-            )
-            {
-                return false;
-            }
+            return false;
         }
 
 
-        const size_t valueOffset =
-            9 +
-            expectedNameLength;
+        BridgeParameters parameters(
+            configuration
+        );
 
 
-        constexpr uint8_t expectedNumeric[] =
+        CrsfParameterRead request;
+
+        request.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        request.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        request.parameterNumber =
+            BridgeParameters::
+                PITCH_INVERSION_PARAMETER;
+
+        request.chunkNumber = 0;
+
+
+        uint8_t frame[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t frameLength = 0;
+
+
+        if (
+            !parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                frame,
+                sizeof(frame),
+                frameLength
+            )
+        )
         {
-            // Current value = 37
-            0x00, 0x00, 0x00, 0x25,
+            return false;
+        }
 
-            // Min = 0
-            0x00, 0x00, 0x00, 0x00,
 
-            // Max = 100
-            0x00, 0x00, 0x00, 0x64,
+        if (
+            frameLength == 0 ||
+            frame[2] !=
+                Crsf::FRAME_PARAMETER_SETTINGS_ENTRY ||
+            frame[3] !=
+                Crsf::ADDRESS_REMOTE_CONTROL ||
+            frame[4] !=
+                Crsf::ADDRESS_FLIGHT_CONTROLLER ||
+            frame[5] !=
+                BridgeParameters::
+                    PITCH_INVERSION_PARAMETER ||
+            frame[6] != 0 ||
+            frame[7] !=
+                BridgeParameters::
+                    ROOT_PARAMETER ||
+            frame[8] !=
+                Crsf::PARAMETER_TYPE_TEXT_SELECTION
+        )
+        {
+            return false;
+        }
 
-            // Default = 10
-            0x00, 0x00, 0x00, 0x0A,
 
-            // Decimal point = 0
+        constexpr uint8_t expectedBody[] =
+        {
+            'P','i','t','c','h',' ',
+            'I','n','v','e','r','s','i','o','n',0,
+
+            'N','o','r','m','a','l',';',
+            'I','n','v','e','r','t','e','d',0,
+
+            // Current = Inverted
+            0x01,
+
+            // Min = Normal
             0x00,
 
-            // Step = 1
-            0x00, 0x00, 0x00, 0x01,
+            // Max = Inverted
+            0x01,
 
-            // Unit intentionally blank for ExpressLRS Lua r18 compatibility.
+            // Default = Inverted
+            0x01,
+
+            // Unit = ""
             0x00
         };
 
 
         for (
             size_t index = 0;
-            index < sizeof(expectedNumeric);
+            index < sizeof(expectedBody);
             ++index
         )
         {
             if (
-                frame[
-                    valueOffset + index
-                ] !=
-                expectedNumeric[index]
+                frame[9 + index] !=
+                expectedBody[index]
             )
             {
                 return false;
@@ -358,102 +400,35 @@ namespace
     }
 
 
-    bool runFloatWriteCaptureTest(
-        CrsfParameterWrite& request
-    )
-    {
-        CrsfFrameEncoder encoder;
-
-        constexpr uint8_t writePayload[] =
-        {
-            BridgeParameters::
-                LED_BRIGHTNESS_PARAMETER,
-
-            // Value = 75
-            0x00, 0x00, 0x00, 0x4B
-        };
-
-
-        uint8_t frame[
-            CrsfFrameEncoder::MAX_FRAME_SIZE
-        ] = {};
-
-        size_t frameLength = 0;
-
-
-        if (
-            !encoder.encodeExtended(
-                Crsf::SYNC_BYTE,
-                Crsf::FRAME_PARAMETER_WRITE,
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                Crsf::ADDRESS_REMOTE_CONTROL,
-                writePayload,
-                sizeof(writePayload),
-                frame,
-                sizeof(frame),
-                frameLength
-            )
-        )
-        {
-            return false;
-        }
-
-
-        CrsfDecoder decoder;
-
-        feedFrame(
-            decoder,
-            frame,
-            frameLength
-        );
-
-
-        if (!decoder.hasParameterWrite())
-        {
-            return false;
-        }
-
-
-        request =
-            decoder.getParameterWrite();
-
-
-        decoder.clearParameterWrite();
-
-
-        return
-            request.destination ==
-                Crsf::ADDRESS_FLIGHT_CONTROLLER &&
-            request.origin ==
-                Crsf::ADDRESS_REMOTE_CONTROL &&
-            request.parameterNumber ==
-                BridgeParameters::
-                    LED_BRIGHTNESS_PARAMETER &&
-            request.dataLength == 4;
-    }
-
-
     bool runValidBrightnessWriteTest()
     {
-        CrsfParameterWrite request;
-
-
-        if (
-            !runFloatWriteCaptureTest(
-                request
-            )
-        )
-        {
-            return false;
-        }
-
-
         BridgeConfiguration configuration =
             BridgeConfiguration::defaults();
 
         BridgeParameters parameters(
             configuration
         );
+
+
+        CrsfParameterWrite request;
+
+        request.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        request.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        request.parameterNumber =
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER;
+
+        request.dataLength = 4;
+
+        // Value = 75
+        request.data[0] = 0x00;
+        request.data[1] = 0x00;
+        request.data[2] = 0x00;
+        request.data[3] = 0x4B;
 
 
         uint8_t response[
@@ -480,62 +455,23 @@ namespace
         }
 
 
-        if (
+        return
             configuration
-                .ledBrightnessPercent != 75 ||
-            result.change !=
+                .ledBrightnessPercent == 75 &&
+            result.change ==
                 BridgeParameterChange::
-                    LedBrightness ||
-            result.ledBrightnessPercent != 75
-        )
-        {
-            return false;
-        }
-
-
-        constexpr uint8_t expectedPayload[] =
-        {
-            BridgeParameters::
-                LED_BRIGHTNESS_PARAMETER,
-            0x00, 0x00, 0x00, 0x4B
-        };
-
-
-        if (
-            responseLength != 11 ||
-            response[2] !=
-                Crsf::FRAME_PARAMETER_WRITE ||
-            response[3] !=
-                Crsf::ADDRESS_REMOTE_CONTROL ||
-            response[4] !=
-                Crsf::ADDRESS_FLIGHT_CONTROLLER
-        )
-        {
-            return false;
-        }
-
-
-        for (
-            size_t index = 0;
-            index < sizeof(expectedPayload);
-            ++index
-        )
-        {
-            if (
-                response[5 + index] !=
-                expectedPayload[index]
-            )
-            {
-                return false;
-            }
-        }
-
-
-        return true;
+                    LedBrightness &&
+            result.ledBrightnessPercent == 75 &&
+            responseLength == 11 &&
+            response[2] ==
+                Crsf::FRAME_PARAMETER_WRITE &&
+            response[5] ==
+                BridgeParameters::
+                    LED_BRIGHTNESS_PARAMETER;
     }
 
 
-    bool runOutOfRangeWriteRejectedTest()
+    bool runPitchWriteNormalTest()
     {
         BridgeConfiguration configuration =
             BridgeConfiguration::defaults();
@@ -555,15 +491,150 @@ namespace
 
         request.parameterNumber =
             BridgeParameters::
-                LED_BRIGHTNESS_PARAMETER;
+                PITCH_INVERSION_PARAMETER;
 
-        request.dataLength = 4;
+        request.dataLength = 1;
 
-        // Value = 101
-        request.data[0] = 0x00;
-        request.data[1] = 0x00;
-        request.data[2] = 0x00;
-        request.data[3] = 0x65;
+        // Normal.
+        request.data[0] = 0;
+
+
+        uint8_t response[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t responseLength = 0;
+
+        BridgeParameterWriteResult result;
+
+
+        if (
+            !parameters.handleWrite(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                response,
+                sizeof(response),
+                responseLength,
+                result
+            )
+        )
+        {
+            return false;
+        }
+
+
+        return
+            !configuration.pitch.inverted &&
+            result.change ==
+                BridgeParameterChange::
+                    PitchInversion &&
+            !result.pitchInverted &&
+            responseLength == 8 &&
+            response[2] ==
+                Crsf::FRAME_PARAMETER_WRITE &&
+            response[3] ==
+                Crsf::ADDRESS_REMOTE_CONTROL &&
+            response[4] ==
+                Crsf::ADDRESS_FLIGHT_CONTROLLER &&
+            response[5] ==
+                BridgeParameters::
+                    PITCH_INVERSION_PARAMETER &&
+            response[6] == 0;
+    }
+
+
+    bool runPitchWriteInvertedTest()
+    {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        configuration.pitch.inverted =
+            false;
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
+        CrsfParameterWrite request;
+
+        request.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        request.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        request.parameterNumber =
+            BridgeParameters::
+                PITCH_INVERSION_PARAMETER;
+
+        request.dataLength = 1;
+
+        // Inverted.
+        request.data[0] = 1;
+
+
+        uint8_t response[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t responseLength = 0;
+
+        BridgeParameterWriteResult result;
+
+
+        if (
+            !parameters.handleWrite(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                response,
+                sizeof(response),
+                responseLength,
+                result
+            )
+        )
+        {
+            return false;
+        }
+
+
+        return
+            configuration.pitch.inverted &&
+            result.change ==
+                BridgeParameterChange::
+                    PitchInversion &&
+            result.pitchInverted &&
+            responseLength == 8 &&
+            response[6] == 1;
+    }
+
+
+    bool runInvalidPitchSelectionRejectedTest()
+    {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
+        CrsfParameterWrite request;
+
+        request.destination =
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
+
+        request.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        request.parameterNumber =
+            BridgeParameters::
+                PITCH_INVERSION_PARAMETER;
+
+        request.dataLength = 1;
+
+        // Only 0 and 1 are valid.
+        request.data[0] = 2;
 
 
         uint8_t response[
@@ -573,13 +644,6 @@ namespace
         size_t responseLength = 123;
 
         BridgeParameterWriteResult result;
-
-        result.change =
-            BridgeParameterChange::
-                LedBrightness;
-
-        result.ledBrightnessPercent =
-            99;
 
 
         if (
@@ -598,8 +662,7 @@ namespace
 
 
         return
-            configuration
-                .ledBrightnessPercent == 10 &&
+            configuration.pitch.inverted &&
             responseLength == 0 &&
             result.change ==
                 BridgeParameterChange::None;
@@ -626,7 +689,7 @@ namespace
 
         request.parameterNumber =
             BridgeParameters::
-                LED_BRIGHTNESS_PARAMETER;
+                PITCH_INVERSION_PARAMETER;
 
 
         uint8_t response[
@@ -659,11 +722,14 @@ namespace
 bool CrsfParameterSelfTest::run()
 {
     return
-        BridgeParameters::PARAMETER_COUNT == 1 &&
+        BridgeParameters::PARAMETER_COUNT == 2 &&
         runParameterReadCaptureTest() &&
         runRootFolderResponseTest() &&
         runBrightnessEntryResponseTest() &&
+        runPitchSelectionEntryResponseTest() &&
         runValidBrightnessWriteTest() &&
-        runOutOfRangeWriteRejectedTest() &&
+        runPitchWriteNormalTest() &&
+        runPitchWriteInvertedTest() &&
+        runInvalidPitchSelectionRejectedTest() &&
         runWrongAddressRejectedTest();
 }

@@ -524,6 +524,17 @@ void loop()
                 }
 
 
+                case BridgeParameterChange::
+                    PitchInversion:
+                {
+                    // ChannelMapper references BridgeConfiguration directly.
+                    // The new inversion setting is therefore consumed on the
+                    // next RC frame without an additional application action.
+
+                    break;
+                }
+
+
                 case BridgeParameterChange::None:
                 {
                     break;

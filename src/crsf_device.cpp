@@ -847,6 +847,155 @@ bool CrsfDevice::buildFloatParameterResponse(
 }
 
 
+bool CrsfDevice::buildTextSelectionParameterResponse(
+    const CrsfParameterRead& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    uint8_t parentFolder,
+    const char* name,
+    const char* options,
+    uint8_t value,
+    uint8_t minimum,
+    uint8_t maximum,
+    uint8_t defaultValue,
+    const char* unit,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    outputLength = 0;
+
+
+    if (
+        request.parameterNumber !=
+            parameterNumber ||
+        request.chunkNumber != 0 ||
+        !requestIsForLocalDevice(
+            request.destination,
+            request.origin,
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    if (
+        value < minimum ||
+        value > maximum ||
+        defaultValue < minimum ||
+        defaultValue > maximum
+    )
+    {
+        return false;
+    }
+
+
+    uint8_t payload[
+        MAX_EXTENDED_PAYLOAD_SIZE
+    ] = {};
+
+    size_t payloadIndex = 0;
+
+
+    payload[payloadIndex++] =
+        parameterNumber;
+
+    // Entire entry fits into one CRSF frame.
+    payload[payloadIndex++] = 0;
+
+    payload[payloadIndex++] =
+        parentFolder;
+
+    payload[payloadIndex++] =
+        Crsf::PARAMETER_TYPE_TEXT_SELECTION;
+
+
+    if (
+        !appendString(
+            name,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    if (
+        !appendString(
+            options,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    constexpr size_t valueBytes = 4;
+
+
+    if (
+        payloadIndex +
+        valueBytes >
+        sizeof(payload)
+    )
+    {
+        return false;
+    }
+
+
+    payload[payloadIndex++] =
+        value;
+
+    payload[payloadIndex++] =
+        minimum;
+
+    payload[payloadIndex++] =
+        maximum;
+
+    payload[payloadIndex++] =
+        defaultValue;
+
+
+    if (
+        !appendString(
+            unit,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    CrsfFrameEncoder encoder;
+
+
+    return
+        encoder.encodeExtended(
+            Crsf::SYNC_BYTE,
+            Crsf::FRAME_PARAMETER_SETTINGS_ENTRY,
+            request.origin,
+            localAddress,
+            payload,
+            payloadIndex,
+            output,
+            outputCapacity,
+            outputLength
+        );
+}
+
+
 bool CrsfDevice::buildFloatWriteResponse(
     const CrsfParameterWrite& request,
     uint8_t localAddress,
@@ -886,6 +1035,58 @@ bool CrsfDevice::buildFloatWriteResponse(
         ),
         &payload[1]
     );
+
+
+    CrsfFrameEncoder encoder;
+
+
+    return
+        encoder.encodeExtended(
+            Crsf::SYNC_BYTE,
+            Crsf::FRAME_PARAMETER_WRITE,
+            request.origin,
+            localAddress,
+            payload,
+            sizeof(payload),
+            output,
+            outputCapacity,
+            outputLength
+        );
+}
+
+
+bool CrsfDevice::buildTextSelectionWriteResponse(
+    const CrsfParameterWrite& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    uint8_t acceptedValue,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    outputLength = 0;
+
+
+    if (
+        request.parameterNumber !=
+            parameterNumber ||
+        !requestIsForLocalDevice(
+            request.destination,
+            request.origin,
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    const uint8_t payload[] =
+    {
+        parameterNumber,
+        acceptedValue
+    };
 
 
     CrsfFrameEncoder encoder;

@@ -10,7 +10,8 @@
 enum class BridgeParameterChange
 {
     None,
-    LedBrightness
+    LedBrightness,
+    PitchInversion
 };
 
 
@@ -20,6 +21,8 @@ struct BridgeParameterWriteResult
         BridgeParameterChange::None;
 
     uint8_t ledBrightnessPercent = 0;
+
+    bool pitchInverted = true;
 };
 
 
@@ -33,7 +36,9 @@ public:
 
     static constexpr uint8_t LED_BRIGHTNESS_PARAMETER = 1;
 
-    static constexpr uint8_t PARAMETER_COUNT = 1;
+    static constexpr uint8_t PITCH_INVERSION_PARAMETER = 2;
+
+    static constexpr uint8_t PARAMETER_COUNT = 2;
 
 
     explicit BridgeParameters(
@@ -78,6 +83,14 @@ private:
     static constexpr int32_t LED_BRIGHTNESS_MAX = 100;
     static constexpr int32_t LED_BRIGHTNESS_DEFAULT = 10;
     static constexpr int32_t LED_BRIGHTNESS_STEP = 1;
+
+
+    static constexpr uint8_t PITCH_NORMAL = 0;
+    static constexpr uint8_t PITCH_INVERTED = 1;
+
+    // Preserve the v1.0 validated pitch orientation.
+    static constexpr uint8_t PITCH_INVERSION_DEFAULT =
+        PITCH_INVERTED;
 
 
     BridgeConfiguration& configuration;

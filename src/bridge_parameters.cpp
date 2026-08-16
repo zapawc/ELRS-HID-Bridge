@@ -36,7 +36,8 @@ bool BridgeParameters::buildReadResponse(
         {
             constexpr uint8_t children[] =
             {
-                LED_BRIGHTNESS_PARAMETER
+                LED_BRIGHTNESS_PARAMETER,
+                PITCH_INVERSION_PARAMETER
             };
 
 
@@ -81,6 +82,35 @@ bool BridgeParameters::buildReadResponse(
                         //
                         // Keep the CRSF FLOAT parameter standards-based
                         // while leaving the presentation unit blank.
+                        "",
+                        output,
+                        outputCapacity,
+                        outputLength
+                    );
+        }
+
+
+        case PITCH_INVERSION_PARAMETER:
+        {
+            const uint8_t currentValue =
+                configuration.pitch.inverted
+                    ? PITCH_INVERTED
+                    : PITCH_NORMAL;
+
+
+            return
+                responseBuilder
+                    .buildTextSelectionParameterResponse(
+                        request,
+                        localAddress,
+                        PITCH_INVERSION_PARAMETER,
+                        ROOT_PARAMETER,
+                        "Pitch Inversion",
+                        "Normal;Inverted",
+                        currentValue,
+                        PITCH_NORMAL,
+                        PITCH_INVERTED,
+                        PITCH_INVERSION_DEFAULT,
                         "",
                         output,
                         outputCapacity,
@@ -187,6 +217,66 @@ bool BridgeParameters::handleWrite(
             result.ledBrightnessPercent =
                 configuration
                     .ledBrightnessPercent;
+
+
+            return true;
+        }
+
+
+        case PITCH_INVERSION_PARAMETER:
+        {
+            if (
+                request.dataLength != 1
+            )
+            {
+                return false;
+            }
+
+
+            const uint8_t selection =
+                request.data[0];
+
+
+            if (
+                selection != PITCH_NORMAL &&
+                selection != PITCH_INVERTED
+            )
+            {
+                return false;
+            }
+
+
+            CrsfDevice responseBuilder;
+
+
+            if (
+                !responseBuilder
+                    .buildTextSelectionWriteResponse(
+                        request,
+                        localAddress,
+                        PITCH_INVERSION_PARAMETER,
+                        selection,
+                        output,
+                        outputCapacity,
+                        outputLength
+                    )
+            )
+            {
+                return false;
+            }
+
+
+            configuration.pitch.inverted =
+                selection ==
+                PITCH_INVERTED;
+
+
+            result.change =
+                BridgeParameterChange::
+                    PitchInversion;
+
+            result.pitchInverted =
+                configuration.pitch.inverted;
 
 
             return true;

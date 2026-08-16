@@ -162,6 +162,24 @@ public:
     ) const;
 
 
+    bool buildTextSelectionParameterResponse(
+        const CrsfParameterRead& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        uint8_t parentFolder,
+        const char* name,
+        const char* options,
+        uint8_t value,
+        uint8_t minimum,
+        uint8_t maximum,
+        uint8_t defaultValue,
+        const char* unit,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
     // A successful FLOAT write is confirmed with a 0x2D frame containing
     // Parameter_number followed by the accepted 4-byte big-endian value.
     bool buildFloatWriteResponse(
@@ -169,6 +187,19 @@ public:
         uint8_t localAddress,
         uint8_t parameterNumber,
         int32_t acceptedValue,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
+    // A successful TEXT_SELECTION write is confirmed with a 0x2D frame
+    // containing Parameter_number followed by the accepted one-byte index.
+    bool buildTextSelectionWriteResponse(
+        const CrsfParameterWrite& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        uint8_t acceptedValue,
         uint8_t* output,
         size_t outputCapacity,
         size_t& outputLength
