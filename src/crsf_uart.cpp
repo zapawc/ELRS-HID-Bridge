@@ -2,6 +2,7 @@
 
 #include "crsf_uart.h"
 
+
 namespace
 {
     // Adafruit QT Py RP2040 physical UART pads:
@@ -20,8 +21,12 @@ namespace
     constexpr size_t UART_FIFO_SIZE = 256;
 }
 
+
 void CrsfUart::begin()
 {
+    receiveByteCount = 0;
+    transmitByteCount = 0;
+
     Serial2.setTX(CRSF_TX_PIN);
     Serial2.setRX(CRSF_RX_PIN);
 
@@ -29,31 +34,84 @@ void CrsfUart::begin()
     Serial2.begin(CRSF_BAUD);
 }
 
-void CrsfUart::update(CrsfDecoder& decoder)
+
+bool CrsfUart::readByte(
+    uint8_t& byte
+)
 {
-    while (Serial2.available() > 0)
+    if (Serial2.available() <= 0)
     {
-        const int received = Serial2.read();
-
-        if (received < 0)
-        {
-            continue;
-        }
-
-        ++byteCount;
-
-        decoder.pushByte(
-            static_cast<uint8_t>(received)
-        );
+        return false;
     }
+
+
+    const int received =
+        Serial2.read();
+
+
+    if (received < 0)
+    {
+        return false;
+    }
+
+
+    byte =
+        static_cast<uint8_t>(
+            received
+        );
+
+
+    ++receiveByteCount;
+
+
+    return true;
 }
+
+
+size_t CrsfUart::write(
+    const uint8_t* data,
+    size_t length
+)
+{
+    if (
+        data == nullptr ||
+        length == 0
+    )
+    {
+        return 0;
+    }
+
+
+    const size_t written =
+        Serial2.write(
+            data,
+            length
+        );
+
+
+    transmitByteCount +=
+        static_cast<uint32_t>(
+            written
+        );
+
+
+    return written;
+}
+
 
 bool CrsfUart::hasReceivedData() const
 {
-    return byteCount > 0;
+    return receiveByteCount > 0;
 }
+
 
 uint32_t CrsfUart::totalBytesReceived() const
 {
-    return byteCount;
+    return receiveByteCount;
+}
+
+
+uint32_t CrsfUart::totalBytesTransmitted() const
+{
+    return transmitByteCount;
 }

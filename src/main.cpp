@@ -13,13 +13,13 @@
 #include "status_led.h"
 #include "usb_hid.h"
 
+
 RawChannels rawChannels;
 NormalizedChannels normalizedChannels;
 ChannelState channelState;
 
 ChannelNormalizer channelNormalizer;
 ChannelMapper channelMapper;
-
 UsbHid usbHid;
 StatusLed statusLed;
 BootButton bootButton;
@@ -39,6 +39,7 @@ bool diagnosticDisplayActive = false;
 
 uint32_t lastValidRcFrameMs = 0;
 uint32_t diagnosticDisplayStartMs = 0;
+
 
 namespace
 {
@@ -83,6 +84,7 @@ namespace
             return;
         }
 
+
         if (receiverFramesSeen)
         {
             led.setStatus(
@@ -92,6 +94,7 @@ namespace
             return;
         }
 
+
         if (receiverBytesSeen)
         {
             led.setStatus(
@@ -100,6 +103,7 @@ namespace
 
             return;
         }
+
 
         led.setStatus(
             SystemStatus::Ready
@@ -115,8 +119,10 @@ void setup()
 
     usbHid.begin();
 
+
     crsfSelfTestPassed =
         CrsfSelfTest::run();
+
 
     if (!crsfSelfTestPassed)
     {
@@ -124,26 +130,33 @@ void setup()
             SystemStatus::Error
         );
 
+
         setFailsafeState(
             channelState
         );
+
 
         usbHid.update(
             channelState
         );
 
+
         return;
     }
+
 
     statusLed.setStatus(
         SystemStatus::Ready
     );
 
+
     crsfUart.begin();
+
 
     setFailsafeState(
         channelState
     );
+
 
     usbHid.update(
         channelState
@@ -156,6 +169,7 @@ void loop()
     if (!crsfSelfTestPassed)
     {
         delay(10);
+
         return;
     }
 
@@ -167,6 +181,7 @@ void loop()
     const BootButtonEvent buttonEvent =
         bootButton.update();
 
+
     if (
         buttonEvent ==
         BootButtonEvent::ShortPress
@@ -175,11 +190,14 @@ void loop()
         diagnosticDisplayActive =
             true;
 
+
         diagnosticDisplayStartMs =
             millis();
 
+
         // Do not display stale RF health after the RC link has
         // already been declared lost.
+
         if (
             linkStatisticsSeen &&
             !receiverLost
@@ -187,6 +205,7 @@ void loop()
         {
             const LinkStatistics& statistics =
                 crsfDecoder.getLinkStatistics();
+
 
             statusLed.showLinkQuality(
                 statistics.uplinkLinkQuality
@@ -198,6 +217,7 @@ void loop()
         }
     }
 
+
     // Long/very-long presses are reserved for future
     // maintenance and factory-reset functions.
 
@@ -206,9 +226,20 @@ void loop()
     // Receive CRSF bytes
     // -------------------------------------------------------------------------
 
-    crsfUart.update(
-        crsfDecoder
-    );
+    uint8_t crsfByte = 0;
+
+
+    while (
+        crsfUart.readByte(
+            crsfByte
+        )
+    )
+    {
+        crsfDecoder.pushByte(
+            crsfByte
+        );
+    }
+
 
     if (
         !receiverBytesSeen &&
@@ -217,6 +248,7 @@ void loop()
     {
         receiverBytesSeen =
             true;
+
 
         if (!diagnosticDisplayActive)
         {
@@ -236,24 +268,30 @@ void loop()
         rawChannels =
             crsfDecoder.getChannels();
 
+
         channelNormalizer.update(
             rawChannels,
             normalizedChannels
         );
+
 
         channelMapper.update(
             normalizedChannels,
             channelState
         );
 
+
         lastValidRcFrameMs =
             millis();
+
 
         receiverFramesSeen =
             true;
 
+
         receiverLost =
             false;
+
 
         if (!diagnosticDisplayActive)
         {
@@ -261,6 +299,7 @@ void loop()
                 SystemStatus::ReceiverFrames
             );
         }
+
 
         crsfDecoder.clearNewChannels();
     }
@@ -277,6 +316,7 @@ void loop()
         linkStatisticsSeen =
             true;
 
+
         crsfDecoder.clearNewLinkStatistics();
     }
 
@@ -290,6 +330,7 @@ void loop()
         const uint32_t now =
             millis();
 
+
         if (
             !receiverLost &&
             (now - lastValidRcFrameMs) >=
@@ -299,14 +340,18 @@ void loop()
             receiverLost =
                 true;
 
+
             setFailsafeState(
                 channelState
             );
 
+
             // Receiver loss has higher priority than a
             // temporary diagnostic display.
+
             diagnosticDisplayActive =
                 false;
+
 
             statusLed.setStatus(
                 SystemStatus::ReceiverLost
@@ -324,6 +369,7 @@ void loop()
         const uint32_t now =
             millis();
 
+
         if (
             (now - diagnosticDisplayStartMs) >=
                 DIAGNOSTIC_DISPLAY_MS
@@ -331,6 +377,7 @@ void loop()
         {
             diagnosticDisplayActive =
                 false;
+
 
             restoreNormalLedState(
                 statusLed,
@@ -349,6 +396,7 @@ void loop()
     usbHid.update(
         channelState
     );
+
 
     delay(1);
 }
