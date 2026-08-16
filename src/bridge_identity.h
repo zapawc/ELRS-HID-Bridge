@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "bridge_parameters.h"
 #include "crsf_device.h"
 #include "crsf_protocol.h"
 #include "firmware_version.h"
@@ -43,14 +44,10 @@ namespace BridgeIdentity
         FirmwareVersion::CRSF_ID;
 
 
-    // Parameter 0 is the standardized root folder. Parameter count reports
-    // the normal numbered settings exposed after that root entry.
-    //
-    // Current set:
-    //
-    // 0 = ROOT folder
-    // 1 = LED Brightness
-    constexpr uint8_t CRSF_PARAMETER_COUNT = 1;
+    // Parameter count is owned by the bridge parameter component so
+    // Device Info and the actual parameter registry cannot drift apart.
+    constexpr uint8_t CRSF_PARAMETER_COUNT =
+        BridgeParameters::PARAMETER_COUNT;
 
     constexpr uint8_t CRSF_PARAMETER_VERSION = 1;
 

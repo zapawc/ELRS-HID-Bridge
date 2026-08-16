@@ -1,8 +1,11 @@
 #include "crsf_parameter_self_test.h"
+
 #include <stddef.h>
 #include <stdint.h>
+
+#include "bridge_configuration.h"
+#include "bridge_parameters.h"
 #include "crsf_decoder.h"
-#include "crsf_device.h"
 #include "crsf_frame_encoder.h"
 #include "crsf_protocol.h"
 
@@ -34,7 +37,8 @@ namespace
 
         constexpr uint8_t payload[] =
         {
-            0x01,
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER,
             0x00
         };
 
@@ -88,7 +92,9 @@ namespace
                 Crsf::ADDRESS_FLIGHT_CONTROLLER ||
             request.origin !=
                 Crsf::ADDRESS_REMOTE_CONTROL ||
-            request.parameterNumber != 1 ||
+            request.parameterNumber !=
+                BridgeParameters::
+                    LED_BRIGHTNESS_PARAMETER ||
             request.chunkNumber != 0
         )
         {
@@ -106,6 +112,14 @@ namespace
 
     bool runRootFolderResponseTest()
     {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
         CrsfParameterRead request;
 
         request.destination =
@@ -114,14 +128,11 @@ namespace
         request.origin =
             Crsf::ADDRESS_REMOTE_CONTROL;
 
-        request.parameterNumber = 0;
+        request.parameterNumber =
+            BridgeParameters::
+                ROOT_PARAMETER;
+
         request.chunkNumber = 0;
-
-
-        constexpr uint8_t children[] =
-        {
-            1
-        };
 
 
         uint8_t frame[
@@ -131,18 +142,10 @@ namespace
         size_t frameLength = 0;
 
 
-        CrsfDevice device;
-
-
         if (
-            !device.buildFolderParameterResponse(
+            !parameters.buildReadResponse(
                 request,
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                0,
-                0,
-                "ROOT",
-                children,
-                sizeof(children),
                 frame,
                 sizeof(frame),
                 frameLength
@@ -161,9 +164,13 @@ namespace
                 Crsf::ADDRESS_REMOTE_CONTROL ||
             frame[4] !=
                 Crsf::ADDRESS_FLIGHT_CONTROLLER ||
-            frame[5] != 0 ||
+            frame[5] !=
+                BridgeParameters::
+                    ROOT_PARAMETER ||
             frame[6] != 0 ||
-            frame[7] != 0 ||
+            frame[7] !=
+                BridgeParameters::
+                    ROOT_PARAMETER ||
             frame[8] !=
                 Crsf::PARAMETER_TYPE_FOLDER
         )
@@ -175,7 +182,8 @@ namespace
         constexpr uint8_t expectedTail[] =
         {
             'R', 'O', 'O', 'T', 0,
-            1,
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER,
             0xFF
         };
 
@@ -202,6 +210,18 @@ namespace
 
     bool runBrightnessEntryResponseTest()
     {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        configuration.ledBrightnessPercent =
+            37;
+
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
         CrsfParameterRead request;
 
         request.destination =
@@ -210,7 +230,10 @@ namespace
         request.origin =
             Crsf::ADDRESS_REMOTE_CONTROL;
 
-        request.parameterNumber = 1;
+        request.parameterNumber =
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER;
+
         request.chunkNumber = 0;
 
 
@@ -221,23 +244,10 @@ namespace
         size_t frameLength = 0;
 
 
-        CrsfDevice device;
-
-
         if (
-            !device.buildFloatParameterResponse(
+            !parameters.buildReadResponse(
                 request,
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                1,
-                0,
-                "LED Brightness",
-                10,
-                0,
-                100,
-                10,
-                0,
-                1,
-                "",
                 frame,
                 sizeof(frame),
                 frameLength
@@ -256,9 +266,13 @@ namespace
                 Crsf::ADDRESS_REMOTE_CONTROL ||
             frame[4] !=
                 Crsf::ADDRESS_FLIGHT_CONTROLLER ||
-            frame[5] != 1 ||
+            frame[5] !=
+                BridgeParameters::
+                    LED_BRIGHTNESS_PARAMETER ||
             frame[6] != 0 ||
-            frame[7] != 0 ||
+            frame[7] !=
+                BridgeParameters::
+                    ROOT_PARAMETER ||
             frame[8] !=
                 Crsf::PARAMETER_TYPE_FLOAT
         )
@@ -299,8 +313,8 @@ namespace
 
         constexpr uint8_t expectedNumeric[] =
         {
-            // Value = 10
-            0x00, 0x00, 0x00, 0x0A,
+            // Current value = 37
+            0x00, 0x00, 0x00, 0x25,
 
             // Min = 0
             0x00, 0x00, 0x00, 0x00,
@@ -344,14 +358,16 @@ namespace
     }
 
 
-    bool runFloatWriteCaptureAndAckTest()
+    bool runFloatWriteCaptureTest(
+        CrsfParameterWrite& request
+    )
     {
         CrsfFrameEncoder encoder;
 
         constexpr uint8_t writePayload[] =
         {
-            // Parameter 1
-            0x01,
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER,
 
             // Value = 75
             0x00, 0x00, 0x00, 0x4B
@@ -398,47 +414,79 @@ namespace
         }
 
 
-        const CrsfParameterWrite request =
+        request =
             decoder.getParameterWrite();
 
 
-        int32_t value = -1;
+        decoder.clearParameterWrite();
+
+
+        return
+            request.destination ==
+                Crsf::ADDRESS_FLIGHT_CONTROLLER &&
+            request.origin ==
+                Crsf::ADDRESS_REMOTE_CONTROL &&
+            request.parameterNumber ==
+                BridgeParameters::
+                    LED_BRIGHTNESS_PARAMETER &&
+            request.dataLength == 4;
+    }
+
+
+    bool runValidBrightnessWriteTest()
+    {
+        CrsfParameterWrite request;
 
 
         if (
-            request.parameterNumber != 1 ||
-            !CrsfDevice::readInt32BigEndian(
-                request.data,
-                request.dataLength,
-                value
-            ) ||
-            value != 75
+            !runFloatWriteCaptureTest(
+                request
+            )
         )
         {
             return false;
         }
 
 
-        uint8_t ack[
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
+        uint8_t response[
             CrsfFrameEncoder::MAX_FRAME_SIZE
         ] = {};
 
-        size_t ackLength = 0;
+        size_t responseLength = 0;
 
-
-        CrsfDevice device;
+        BridgeParameterWriteResult result;
 
 
         if (
-            !device.buildFloatWriteResponse(
+            !parameters.handleWrite(
                 request,
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                1,
-                value,
-                ack,
-                sizeof(ack),
-                ackLength
+                response,
+                sizeof(response),
+                responseLength,
+                result
             )
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            configuration
+                .ledBrightnessPercent != 75 ||
+            result.change !=
+                BridgeParameterChange::
+                    LedBrightness ||
+            result.ledBrightnessPercent != 75
         )
         {
             return false;
@@ -447,18 +495,19 @@ namespace
 
         constexpr uint8_t expectedPayload[] =
         {
-            0x01,
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER,
             0x00, 0x00, 0x00, 0x4B
         };
 
 
         if (
-            ackLength != 11 ||
-            ack[2] !=
+            responseLength != 11 ||
+            response[2] !=
                 Crsf::FRAME_PARAMETER_WRITE ||
-            ack[3] !=
+            response[3] !=
                 Crsf::ADDRESS_REMOTE_CONTROL ||
-            ack[4] !=
+            response[4] !=
                 Crsf::ADDRESS_FLIGHT_CONTROLLER
         )
         {
@@ -473,7 +522,7 @@ namespace
         )
         {
             if (
-                ack[5 + index] !=
+                response[5 + index] !=
                 expectedPayload[index]
             )
             {
@@ -486,46 +535,61 @@ namespace
     }
 
 
-    bool runWrongAddressRejectedTest()
+    bool runOutOfRangeWriteRejectedTest()
     {
-        CrsfParameterRead request;
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
+        CrsfParameterWrite request;
 
         request.destination =
-            Crsf::ADDRESS_USB;
+            Crsf::ADDRESS_FLIGHT_CONTROLLER;
 
         request.origin =
             Crsf::ADDRESS_REMOTE_CONTROL;
 
-        request.parameterNumber = 1;
+        request.parameterNumber =
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER;
+
+        request.dataLength = 4;
+
+        // Value = 101
+        request.data[0] = 0x00;
+        request.data[1] = 0x00;
+        request.data[2] = 0x00;
+        request.data[3] = 0x65;
 
 
-        uint8_t frame[
+        uint8_t response[
             CrsfFrameEncoder::MAX_FRAME_SIZE
         ] = {};
 
-        size_t frameLength = 123;
+        size_t responseLength = 123;
 
+        BridgeParameterWriteResult result;
 
-        CrsfDevice device;
+        result.change =
+            BridgeParameterChange::
+                LedBrightness;
+
+        result.ledBrightnessPercent =
+            99;
 
 
         if (
-            device.buildFloatParameterResponse(
+            parameters.handleWrite(
                 request,
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                1,
-                0,
-                "LED Brightness",
-                10,
-                0,
-                100,
-                10,
-                0,
-                1,
-                "",
-                frame,
-                sizeof(frame),
-                frameLength
+                response,
+                sizeof(response),
+                responseLength,
+                result
             )
         )
         {
@@ -534,7 +598,60 @@ namespace
 
 
         return
-            frameLength == 0;
+            configuration
+                .ledBrightnessPercent == 10 &&
+            responseLength == 0 &&
+            result.change ==
+                BridgeParameterChange::None;
+    }
+
+
+    bool runWrongAddressRejectedTest()
+    {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
+        CrsfParameterRead request;
+
+        request.destination =
+            Crsf::ADDRESS_USB;
+
+        request.origin =
+            Crsf::ADDRESS_REMOTE_CONTROL;
+
+        request.parameterNumber =
+            BridgeParameters::
+                LED_BRIGHTNESS_PARAMETER;
+
+
+        uint8_t response[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t responseLength = 123;
+
+
+        if (
+            parameters.buildReadResponse(
+                request,
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                response,
+                sizeof(response),
+                responseLength
+            )
+        )
+        {
+            return false;
+        }
+
+
+        return
+            responseLength == 0;
     }
 }
 
@@ -542,9 +659,11 @@ namespace
 bool CrsfParameterSelfTest::run()
 {
     return
+        BridgeParameters::PARAMETER_COUNT == 1 &&
         runParameterReadCaptureTest() &&
         runRootFolderResponseTest() &&
         runBrightnessEntryResponseTest() &&
-        runFloatWriteCaptureAndAckTest() &&
+        runValidBrightnessWriteTest() &&
+        runOutOfRangeWriteRejectedTest() &&
         runWrongAddressRejectedTest();
 }

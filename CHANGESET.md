@@ -1,108 +1,103 @@
-# ELRS-HID-Bridge — Post-v1.0 Checkpoint 2 (Lua r18 Compatibility Revision)
+# ELRS-HID-Bridge — Post-v1.0 Checkpoint 3
 
 ## Intent
 
-Prove one standard CRSF/EdgeTX configuration parameter end-to-end:
+Refactor the proven CRSF parameter proof of concept into a small reusable
+parameter seam **without changing user-visible behavior**.
 
-**LED Brightness — 0 to 100**
+Checkpoint 2 proved that EdgeTX can discover, read, edit, and write the
+runtime LED Brightness CRSF FLOAT parameter on real hardware.
 
-This revision preserves the CRSF `FLOAT` implementation from the original
-Checkpoint 2 but removes the literal `%` unit string because the uploaded
-ExpressLRS `elrs.lua` r18 script constructs a Lua `string.format()` pattern by
-concatenating the unit directly after the numeric conversion. A literal `%`
-therefore produces the observed script error:
+This checkpoint moves parameter-specific policy out of `main.cpp` before a
+second setting is introduced.
 
-`bad argument #3 to 'format' (no value)`
+## New component
 
-This is a Lua r18 compatibility workaround, not a CRSF protocol rollback.
+`BridgeParameters` now owns:
 
-## Protocol behavior
+- parameter IDs,
+- parameter count,
+- root-folder membership,
+- parameter names,
+- CRSF parameter types,
+- ranges/defaults/steps,
+- the ExpressLRS Lua r18 blank-unit compatibility behavior,
+- parameter read-response construction,
+- parameter write validation,
+- updates to `BridgeConfiguration`,
+- write acknowledgement construction.
 
-- `0x29` Device Info reports one normal parameter.
-- Parameter `0` is the standard `ROOT` folder.
-- Parameter `1` is `LED Brightness`.
-- `LED Brightness` remains CRSF `FLOAT` (`0x08`).
-- Range is `0` through `100`.
-- Decimal point is `0`.
-- Step size is `1`.
-- Unit string is intentionally empty.
-- Parameter reads use `0x2C`.
-- Parameter entries are returned in `0x2B`.
-- Accepted FLOAT writes are acknowledged with `0x2D`.
-- All entries fit in one CRSF frame, so only chunk `0` is required.
+`main.cpp` remains responsible for application-side effects and transport:
 
-## Why the unit is blank
+- receive the captured request from `CrsfDecoder`,
+- ask `BridgeParameters` to process it,
+- apply the returned LED-brightness side effect,
+- transmit the already-built CRSF response.
 
-The uploaded Lua r18 script constructs FLOAT display formatting in the form:
+This deliberately avoids a generic callback/template/persistence framework.
 
-`"%." .. precision .. "f" .. unit`
+## User-visible behavior
 
-With `%` as the unit, the resulting format string is effectively:
+There should be **no intentional behavior change** from validated Checkpoint 2.
 
-`%.0f%`
-
-The trailing `%` is interpreted as the beginning of another Lua formatting
-directive and causes the script exception.
-
-Leaving the unit empty retains the standards-based FLOAT parameter while
-avoiding the Lua r18 display bug. Expected presentation is approximately:
+EdgeTX should still show approximately:
 
 `LED Brightness    10`
 
-rather than:
+The parameter remains:
 
-`LED Brightness    10%`
+- CRSF `FLOAT`,
+- range 0–100,
+- precision 0,
+- step 1,
+- runtime-only,
+- blank unit string for ExpressLRS Lua r18 compatibility.
 
-## Runtime behavior
+The physical LED should still update immediately when the value changes.
 
-Default LED brightness is 10.
+Reboot should still restore the default value of 10.
 
-The previous NeoPixel brightness was 24/255, approximately 9.4%, so the new
-default intentionally remains visually close to the v1.0.0 behavior.
+## Device Info consistency
 
-A valid EdgeTX write:
+`BridgeIdentity::CRSF_PARAMETER_COUNT` now derives from:
 
-1. is decoded from the standard four-byte CRSF FLOAT representation,
-2. is range checked,
-3. updates `BridgeConfiguration::ledBrightnessPercent`,
-4. is applied immediately to the QT Py NeoPixel,
-5. is acknowledged to EdgeTX.
+`BridgeParameters::PARAMETER_COUNT`
 
-The value is **not persisted**. Rebooting restores the default of 10.
-
-## Files changed
-
-- `src/bridge_configuration.h`
-- `src/bridge_configuration.cpp`
-- `src/status_led.h`
-- `src/status_led.cpp`
-- `src/crsf_protocol.h`
-- `src/crsf_device.h`
-- `src/crsf_device.cpp`
-- `src/crsf_dispatcher.h`
-- `src/crsf_dispatcher.cpp`
-- `src/crsf_decoder.h`
-- `src/crsf_decoder.cpp`
-- `src/bridge_identity.h`
-- `src/main.cpp`
+This prevents Device Info metadata from drifting away from the actual parameter
+component as additional parameters are introduced later.
 
 ## Files added
 
-- `src/crsf_parameter_self_test.h`
+- `src/bridge_parameters.h`
+- `src/bridge_parameters.cpp`
+
+## Files changed
+
+- `src/main.cpp`
+- `src/bridge_identity.h`
 - `src/crsf_parameter_self_test.cpp`
 
-## Compatibility revision versus the first Checkpoint 2 ZIP
+`src/crsf_parameter_self_test.h` is included as a complete replacement file for
+checkpoint consistency but has no behavioral change.
 
-Only the FLOAT unit presentation is intentionally changed:
+## Self-test coverage
 
-- Previous unit: `%`
-- Revised unit: empty string
+The CRSF parameter startup self-test now exercises the new abstraction directly:
 
-The FLOAT type, numeric range, step, default, read/write behavior, and bridge
-runtime behavior remain unchanged.
+- CRSF Parameter Read capture through decoder/dispatcher,
+- root-folder response,
+- LED Brightness FLOAT response,
+- current runtime value reflected in reads,
+- valid write updates `BridgeConfiguration`,
+- valid write produces the expected acknowledgement,
+- out-of-range write is rejected without modifying configuration,
+- wrong-address read is rejected,
+- parameter count remains one.
 
 ## Intentionally unchanged
 
+- CRSF wire representation of the validated LED parameter
+- blank unit workaround for ExpressLRS Lua r18
 - HID mapping
 - HID axis orientation
 - receiver timeout
@@ -110,98 +105,67 @@ runtime behavior remain unchanged.
 - Link Statistics behavior
 - BOOT-button maintenance behavior
 - USB descriptors
-- persistent storage
+- persistence
 - board support
 - `pico_debug`
 - firmware semantic version
 
 ## Build procedure
 
-Use the normal VS Code / PlatformIO workflow.
+Use the established VS Code / PlatformIO workflow.
 
 1. Overlay this ZIP at the repository root.
 2. Build the normal `pico` environment.
-3. Check VS Code **Problems**.
-4. Do not use `pico_debug` for this checkpoint.
+3. Confirm VS Code **Problems** is clear.
+4. Flash the normal build.
+5. Do not use `pico_debug`.
 
-## Hardware test procedure
+## Hardware regression
 
-### Parameter discovery
+### CRSF parameter
 
-1. Flash the normal `pico` build.
-2. Link the transmitter/receiver normally.
-3. Open the ExpressLRS script on EdgeTX.
-4. Open `Other Devices`.
-5. Open `ELRS-HID-Bridge`.
-6. Confirm the previous Lua syntax error no longer appears.
-7. Confirm `LED Brightness` appears with a value near 10.
+1. Open the ExpressLRS Lua script.
+2. Open `Other Devices`.
+3. Open `ELRS-HID-Bridge`.
+4. Confirm it opens without a Lua error.
+5. Confirm `LED Brightness` appears.
+6. Confirm the initial value is 10.
+7. Change it to several values such as 25, 50, and 100.
+8. Confirm the physical LED changes immediately.
+9. Set it to 0 and confirm only the LED goes dark; HID remains functional.
+10. Return to a visible value.
+11. Power-cycle the bridge and confirm brightness returns to 10.
 
-### Parameter write
+### HID/failsafe smoke regression
 
-Test these values:
+1. Open `joy.cpl`.
+2. Confirm all eight analog controls operate normally.
+3. Confirm the existing button mappings remain correct.
+4. Turn the transmitter off.
+5. Confirm all analog controls neutralize and all buttons release.
+6. Turn the transmitter back on.
+7. Confirm automatic recovery.
 
-- 0
-- 10
-- 25
-- 50
-- 100
+## Success criteria
 
-For each value:
+Checkpoint 3 succeeds if:
 
-1. confirm EdgeTX accepts the change,
-2. confirm the physical LED changes immediately,
-3. confirm the CRSF device page remains responsive,
-4. confirm RC/HID behavior continues normally.
-
-At 0 the LED being dark is expected. HID must remain fully operational.
-
-### Volatile configuration
-
-1. Set a non-default value such as 50.
-2. Power-cycle the bridge.
-3. Confirm LED brightness returns to 10.
-
-### HID / failsafe regression
-
-1. Confirm all eight analog controls and existing buttons in `joy.cpl`.
-2. Turn the transmitter off.
-3. Confirm all eight analog controls neutralize and all buttons release.
-4. Turn the transmitter back on.
-5. Confirm automatic recovery.
-
-## Expected checkpoint result
-
-This checkpoint succeeds when:
-
-- opening `ELRS-HID-Bridge` no longer throws the Lua r18 formatting error,
-- `LED Brightness` is visible,
-- EdgeTX can change it from 0–100,
-- LED brightness changes immediately,
-- reboot restores 10,
-- HID behavior remains unchanged,
-- failsafe behavior remains unchanged,
-- startup self-tests pass.
-
-## Troubleshooting boundary
-
-If the Lua error disappears but the field is missing or cannot be edited, stop
-and capture the exact behavior before making more changes:
-
-- Does `ELRS-HID-Bridge` open normally?
-- Does `LED Brightness` appear?
-- What value is shown?
-- Can editing mode be entered?
-- Does changing the value affect the physical LED?
-- Does the displayed value refresh after editing?
+- the normal `pico` build is clean,
+- startup self-tests pass,
+- the EdgeTX parameter behaves exactly as in Checkpoint 2,
+- the Lua r18 compatibility workaround remains effective,
+- HID behavior is unchanged,
+- failsafe behavior is unchanged.
 
 ## Suggested commit
 
-If validation passes:
-
-`feat: add runtime CRSF LED brightness parameter`
+`refactor: isolate CRSF bridge parameter policy`
 
 ## Next checkpoint
 
-If hardware validation succeeds, do not immediately add persistence. First
-review the working parameter path and decide whether a small reusable parameter
-definition layer is justified before adding more settings.
+After validation and commit, add **one second real parameter** using
+`BridgeParameters`.
+
+The second parameter should be selected for low operational risk and clear
+hardware/behavioral verification. Its implementation will test whether this
+abstraction is genuinely useful before persistence is introduced.

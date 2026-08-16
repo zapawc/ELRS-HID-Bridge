@@ -2,6 +2,7 @@
 #include "boot_button.h"
 #include "bridge_configuration.h"
 #include "bridge_identity.h"
+#include "bridge_parameters.h"
 #include "bridge_state.h"
 #include "channel_mapper.h"
 #include "channel_normalizer.h"
@@ -25,28 +26,6 @@
 #include "usb_hid.h"
 
 
-namespace
-{
-    constexpr uint8_t PARAMETER_ROOT = 0;
-    constexpr uint8_t PARAMETER_LED_BRIGHTNESS = 1;
-
-    constexpr int32_t LED_BRIGHTNESS_MIN = 0;
-    constexpr int32_t LED_BRIGHTNESS_MAX = 100;
-    constexpr int32_t LED_BRIGHTNESS_DEFAULT = 10;
-    constexpr int32_t LED_BRIGHTNESS_STEP = 1;
-
-
-    bool requestIsForBridge(
-        uint8_t destination
-    )
-    {
-        return
-            destination ==
-            BridgeIdentity::CRSF_DEVICE_ADDRESS;
-    }
-}
-
-
 RawChannels rawChannels;
 
 NormalizedChannels normalizedChannels;
@@ -60,6 +39,11 @@ ChannelState channelState;
 
 BridgeConfiguration bridgeConfiguration =
     BridgeConfiguration::defaults();
+
+
+BridgeParameters bridgeParameters(
+    bridgeConfiguration
+);
 
 
 ChannelNormalizer channelNormalizer;
@@ -445,10 +429,8 @@ void loop()
     // -------------------------------------------------------------------------
     // CRSF parameter reads
     //
-    // Parameter 0 = standardized ROOT folder
-    // Parameter 1 = LED Brightness, FLOAT 0-100%
-    //
-    // All entries fit in one CRSF frame, so only chunk 0 is supported.
+    // BridgeParameters owns parameter IDs, metadata, ranges, and CRSF entry
+    // construction. main.cpp only transports the resulting response.
     // -------------------------------------------------------------------------
 
     if (
@@ -466,74 +448,21 @@ void loop()
         size_t responseLength = 0;
 
 
-        CrsfDevice responseBuilder;
-
-
         if (
-            request.parameterNumber ==
-                PARAMETER_ROOT
+            bridgeParameters
+                .buildReadResponse(
+                    request,
+                    BridgeIdentity::CRSF_DEVICE_ADDRESS,
+                    response,
+                    sizeof(response),
+                    responseLength
+                )
         )
         {
-            constexpr uint8_t children[] =
-            {
-                PARAMETER_LED_BRIGHTNESS
-            };
-
-
-            if (
-                responseBuilder
-                    .buildFolderParameterResponse(
-                        request,
-                        BridgeIdentity::CRSF_DEVICE_ADDRESS,
-                        PARAMETER_ROOT,
-                        PARAMETER_ROOT,
-                        "ROOT",
-                        children,
-                        sizeof(children),
-                        response,
-                        sizeof(response),
-                        responseLength
-                    )
-            )
-            {
-                crsfUart.write(
-                    response,
-                    responseLength
-                );
-            }
-        }
-        else if (
-            request.parameterNumber ==
-                PARAMETER_LED_BRIGHTNESS
-        )
-        {
-            if (
-                responseBuilder
-                    .buildFloatParameterResponse(
-                        request,
-                        BridgeIdentity::CRSF_DEVICE_ADDRESS,
-                        PARAMETER_LED_BRIGHTNESS,
-                        PARAMETER_ROOT,
-                        "LED Brightness",
-                        bridgeConfiguration
-                            .ledBrightnessPercent,
-                        LED_BRIGHTNESS_MIN,
-                        LED_BRIGHTNESS_MAX,
-                        LED_BRIGHTNESS_DEFAULT,
-                        0,
-                        LED_BRIGHTNESS_STEP,
-                        "",
-                        response,
-                        sizeof(response),
-                        responseLength
-                    )
-            )
-            {
-                crsfUart.write(
-                    response,
-                    responseLength
-                );
-            }
+            crsfUart.write(
+                response,
+                responseLength
+            );
         }
 
 
@@ -544,14 +473,8 @@ void loop()
     // -------------------------------------------------------------------------
     // CRSF parameter writes
     //
-    // Runtime-only checkpoint:
-    //
-    // - accept only parameter 1
-    // - require a standard four-byte FLOAT value
-    // - validate 0-100
-    // - apply immediately
-    // - acknowledge with 0x2D
-    // - do not persist across reboot
+    // BridgeParameters validates and updates BridgeConfiguration and returns
+    // the application-side effect to perform. Persistence remains deferred.
     // -------------------------------------------------------------------------
 
     if (
@@ -562,71 +485,56 @@ void loop()
             crsfDecoder.getParameterWrite();
 
 
+        uint8_t response[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t responseLength = 0;
+
+
+        BridgeParameterWriteResult result;
+
+
         if (
-            request.parameterNumber ==
-                PARAMETER_LED_BRIGHTNESS &&
-            requestIsForBridge(
-                request.destination
-            )
+            bridgeParameters
+                .handleWrite(
+                    request,
+                    BridgeIdentity::CRSF_DEVICE_ADDRESS,
+                    response,
+                    sizeof(response),
+                    responseLength,
+                    result
+                )
         )
         {
-            int32_t brightness = 0;
-
-
-            if (
-                CrsfDevice::readInt32BigEndian(
-                    request.data,
-                    request.dataLength,
-                    brightness
-                ) &&
-                brightness >=
-                    LED_BRIGHTNESS_MIN &&
-                brightness <=
-                    LED_BRIGHTNESS_MAX
+            switch (
+                result.change
             )
             {
-                bridgeConfiguration
-                    .ledBrightnessPercent =
-                    static_cast<uint8_t>(
-                        brightness
-                    );
-
-
-                statusLed.setBrightnessPercent(
-                    bridgeConfiguration
-                        .ledBrightnessPercent
-                );
-
-
-                uint8_t response[
-                    CrsfFrameEncoder::MAX_FRAME_SIZE
-                ] = {};
-
-                size_t responseLength = 0;
-
-
-                CrsfDevice responseBuilder;
-
-
-                if (
-                    responseBuilder
-                        .buildFloatWriteResponse(
-                            request,
-                            BridgeIdentity::CRSF_DEVICE_ADDRESS,
-                            PARAMETER_LED_BRIGHTNESS,
-                            brightness,
-                            response,
-                            sizeof(response),
-                            responseLength
-                        )
-                )
+                case BridgeParameterChange::
+                    LedBrightness:
                 {
-                    crsfUart.write(
-                        response,
-                        responseLength
-                    );
+                    statusLed
+                        .setBrightnessPercent(
+                            result
+                                .ledBrightnessPercent
+                        );
+
+                    break;
+                }
+
+
+                case BridgeParameterChange::None:
+                {
+                    break;
                 }
             }
+
+
+            crsfUart.write(
+                response,
+                responseLength
+            );
         }
 
 
