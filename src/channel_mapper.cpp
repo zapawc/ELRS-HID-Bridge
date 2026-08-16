@@ -1,32 +1,72 @@
 #include "channel_mapper.h"
 
-namespace
+
+ChannelMapper::ChannelMapper(
+    const BridgeConfiguration& configuration
+)
+    : configuration(configuration)
 {
-    constexpr uint16_t SWITCH_LOW_THRESHOLD = 16384;
-    constexpr uint16_t SWITCH_HIGH_THRESHOLD = 49151;
+}
+
+
+uint16_t ChannelMapper::mappedValue(
+    const NormalizedChannels& channels,
+    const AxisMapping& mapping
+) const
+{
+    const uint16_t value =
+        channels.get(
+            mapping.channel
+        );
+
+
+    if (!mapping.inverted)
+    {
+        return value;
+    }
+
+
+    return static_cast<uint16_t>(
+        NormalizedChannels::MAX -
+        value
+    );
 }
 
 
 ChannelMapper::SwitchPosition
-ChannelMapper::decodeThreePosition(uint16_t value)
+ChannelMapper::decodeThreePosition(
+    uint16_t value
+) const
 {
-    if (value < SWITCH_LOW_THRESHOLD)
+    if (
+        value <
+        configuration.switchLowThreshold
+    )
     {
         return SwitchPosition::Low;
     }
 
-    if (value > SWITCH_HIGH_THRESHOLD)
+
+    if (
+        value >
+        configuration.switchHighThreshold
+    )
     {
         return SwitchPosition::High;
     }
+
 
     return SwitchPosition::Center;
 }
 
 
-bool ChannelMapper::decodeTwoPosition(uint16_t value)
+bool ChannelMapper::decodeTwoPosition(
+    uint16_t value
+) const
 {
-    return value > SWITCH_HIGH_THRESHOLD;
+    return
+        value >
+        configuration.switchHighThreshold;
 }
 
 
@@ -43,6 +83,7 @@ void ChannelMapper::setButton(
         return;
     }
 
+
     state.buttons |=
         (1UL << (buttonNumber - 1));
 }
@@ -54,232 +95,164 @@ void ChannelMapper::update(
 ) const
 {
     // -------------------------------------------------------------------------
-    // Primary controls
-    //
-    // CH1 -> Roll
-    // CH2 -> Pitch
-    // CH3 -> Throttle
-    // CH4 -> Yaw
-    //
-    // Confirmed HID orientation:
-    //
-    // Roll     = normal
-    // Pitch    = inverted
-    // Throttle = normal
-    // Yaw      = normal
+    // Primary proportional controls
     // -------------------------------------------------------------------------
 
     state.roll =
-        channels.get(ChannelIndex::CH1);
+        mappedValue(
+            channels,
+            configuration.roll
+        );
+
 
     state.pitch =
-        NormalizedChannels::MAX -
-        channels.get(ChannelIndex::CH2);
+        mappedValue(
+            channels,
+            configuration.pitch
+        );
+
 
     state.throttle =
-        channels.get(ChannelIndex::CH3);
+        mappedValue(
+            channels,
+            configuration.throttle
+        );
+
 
     state.yaw =
-        channels.get(ChannelIndex::CH4);
+        mappedValue(
+            channels,
+            configuration.yaw
+        );
 
 
     // -------------------------------------------------------------------------
-    // AUX switch controls
+    // Rebuild button state on every update.
     // -------------------------------------------------------------------------
 
     state.buttons = 0;
 
 
-    // SF / CH5
-    // Up   -> released
-    // Down -> Button 1
+    // -------------------------------------------------------------------------
+    // Two-position switches
+    // -------------------------------------------------------------------------
 
-    if (
-        decodeTwoPosition(
-            channels.get(ChannelIndex::CH5)
-        )
+    for (
+        uint8_t index = 0;
+        index <
+            BridgeConfiguration::
+                TWO_POSITION_SWITCH_COUNT;
+        ++index
     )
     {
-        setButton(state, 1);
+        const TwoPositionSwitchMapping& mapping =
+            configuration
+                .twoPositionSwitches[index];
+
+
+        if (
+            decodeTwoPosition(
+                channels.get(
+                    mapping.channel
+                )
+            )
+        )
+        {
+            setButton(
+                state,
+                mapping.button
+            );
+        }
     }
 
 
-    // SA / CH6
-    // Up     -> no button
-    // Middle -> Button 2
-    // Down   -> Button 3
+    // -------------------------------------------------------------------------
+    // Three-position switches
+    //
+    // Low    -> no button
+    // Center -> centerButton
+    // High   -> highButton
+    // -------------------------------------------------------------------------
 
-    switch (
-        decodeThreePosition(
-            channels.get(ChannelIndex::CH6)
-        )
+    for (
+        uint8_t index = 0;
+        index <
+            BridgeConfiguration::
+                THREE_POSITION_SWITCH_COUNT;
+        ++index
     )
     {
-        case SwitchPosition::Center:
-            setButton(state, 2);
-            break;
-
-        case SwitchPosition::High:
-            setButton(state, 3);
-            break;
-
-        case SwitchPosition::Low:
-            break;
-    }
+        const ThreePositionSwitchMapping& mapping =
+            configuration
+                .threePositionSwitches[index];
 
 
-    // SB / CH7
-    // Up     -> no button
-    // Middle -> Button 4
-    // Down   -> Button 5
-
-    switch (
-        decodeThreePosition(
-            channels.get(ChannelIndex::CH7)
+        switch (
+            decodeThreePosition(
+                channels.get(
+                    mapping.channel
+                )
+            )
         )
-    )
-    {
-        case SwitchPosition::Center:
-            setButton(state, 4);
-            break;
+        {
+            case SwitchPosition::Center:
+            {
+                setButton(
+                    state,
+                    mapping.centerButton
+                );
 
-        case SwitchPosition::High:
-            setButton(state, 5);
-            break;
-
-        case SwitchPosition::Low:
-            break;
-    }
+                break;
+            }
 
 
-    // SC / CH8
-    // Up     -> no button
-    // Middle -> Button 6
-    // Down   -> Button 7
+            case SwitchPosition::High:
+            {
+                setButton(
+                    state,
+                    mapping.highButton
+                );
 
-    switch (
-        decodeThreePosition(
-            channels.get(ChannelIndex::CH8)
-        )
-    )
-    {
-        case SwitchPosition::Center:
-            setButton(state, 6);
-            break;
-
-        case SwitchPosition::High:
-            setButton(state, 7);
-            break;
-
-        case SwitchPosition::Low:
-            break;
-    }
+                break;
+            }
 
 
-    // SD / CH9
-    // Up     -> no button
-    // Middle -> Button 8
-    // Down   -> Button 9
-
-    switch (
-        decodeThreePosition(
-            channels.get(ChannelIndex::CH9)
-        )
-    )
-    {
-        case SwitchPosition::Center:
-            setButton(state, 8);
-            break;
-
-        case SwitchPosition::High:
-            setButton(state, 9);
-            break;
-
-        case SwitchPosition::Low:
-            break;
-    }
-
-
-    // SE / CH10
-    // Up     -> no button
-    // Middle -> Button 10
-    // Down   -> Button 11
-
-    switch (
-        decodeThreePosition(
-            channels.get(ChannelIndex::CH10)
-        )
-    )
-    {
-        case SwitchPosition::Center:
-            setButton(state, 10);
-            break;
-
-        case SwitchPosition::High:
-            setButton(state, 11);
-            break;
-
-        case SwitchPosition::Low:
-            break;
-    }
-
-
-    // SG / CH11
-    // Up     -> no button
-    // Middle -> Button 12
-    // Down   -> Button 13
-
-    switch (
-        decodeThreePosition(
-            channels.get(ChannelIndex::CH11)
-        )
-    )
-    {
-        case SwitchPosition::Center:
-            setButton(state, 12);
-            break;
-
-        case SwitchPosition::High:
-            setButton(state, 13);
-            break;
-
-        case SwitchPosition::Low:
-            break;
-    }
-
-
-    // SH / CH12
-    // Released -> no button
-    // Pressed  -> Button 14
-
-    if (
-        decodeTwoPosition(
-            channels.get(ChannelIndex::CH12)
-        )
-    )
-    {
-        setButton(state, 14);
+            case SwitchPosition::Low:
+            {
+                break;
+            }
+        }
     }
 
 
     // -------------------------------------------------------------------------
     // Additional proportional controls
-    //
-    // CH13 -> Z
-    // CH14 -> X Rotation
-    // CH15 -> Y Rotation
-    // CH16 -> Z Rotation
     // -------------------------------------------------------------------------
 
     state.auxAnalog1 =
-        channels.get(ChannelIndex::CH13);
+        mappedValue(
+            channels,
+            configuration.auxAnalog1
+        );
+
 
     state.auxAnalog2 =
-        channels.get(ChannelIndex::CH14);
+        mappedValue(
+            channels,
+            configuration.auxAnalog2
+        );
+
 
     state.auxAnalog3 =
-        channels.get(ChannelIndex::CH15);
+        mappedValue(
+            channels,
+            configuration.auxAnalog3
+        );
+
 
     state.auxAnalog4 =
-        channels.get(ChannelIndex::CH16);
+        mappedValue(
+            channels,
+            configuration.auxAnalog4
+        );
 }

@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "boot_button.h"
+#include "bridge_configuration.h"
 #include "bridge_state.h"
 #include "channel_mapper.h"
 #include "channel_normalizer.h"
@@ -18,8 +19,27 @@ RawChannels rawChannels;
 NormalizedChannels normalizedChannels;
 ChannelState channelState;
 
+
+// -----------------------------------------------------------------------------
+// Configuration
+//
+// The reference firmware currently uses compiled defaults only.
+//
+// Future persistent storage and CRSF parameter configuration can modify this
+// canonical model without requiring ChannelMapper or the rest of the runtime
+// path to own configuration policy.
+// -----------------------------------------------------------------------------
+
+BridgeConfiguration bridgeConfiguration =
+    BridgeConfiguration::defaults();
+
+
 ChannelNormalizer channelNormalizer;
-ChannelMapper channelMapper;
+
+ChannelMapper channelMapper(
+    bridgeConfiguration
+);
+
 UsbHid usbHid;
 StatusLed statusLed;
 BootButton bootButton;
@@ -38,8 +58,6 @@ uint32_t diagnosticDisplayStartMs = 0;
 
 namespace
 {
-    constexpr uint32_t RECEIVER_TIMEOUT_MS = 500;
-
     constexpr uint32_t DIAGNOSTIC_DISPLAY_MS = 3000;
 
 
@@ -314,7 +332,7 @@ void loop()
     if (
         bridgeState.updateRcTimeout(
             millis(),
-            RECEIVER_TIMEOUT_MS
+            bridgeConfiguration.receiverTimeoutMs
         )
     )
     {
