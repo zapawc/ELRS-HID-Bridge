@@ -7,6 +7,7 @@
 #include "channel_normalizer.h"
 #include "channel_state.h"
 #include "crsf_decoder.h"
+#include "crsf_frame_encoder_self_test.h"
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
 #include "failsafe_policy.h"
@@ -65,7 +66,7 @@ CrsfDecoder crsfDecoder;
 BridgeState bridgeState;
 
 
-bool crsfSelfTestPassed = false;
+bool startupSelfTestsPassed = false;
 
 
 void setup()
@@ -86,11 +87,21 @@ void setup()
     usbHid.begin();
 
 
-    crsfSelfTestPassed =
-        CrsfSelfTest::run();
+    // -------------------------------------------------------------------------
+    // Startup CRSF tests
+    //
+    // Both receive parsing/decoding and outbound frame construction are
+    // validated before the live CRSF UART is started.
+    //
+    // The encoder test does not transmit anything.
+    // -------------------------------------------------------------------------
+
+    startupSelfTestsPassed =
+        CrsfSelfTest::run() &&
+        CrsfFrameEncoderSelfTest::run();
 
 
-    if (!crsfSelfTestPassed)
+    if (!startupSelfTestsPassed)
     {
         statusDisplay.showFatalError();
 
@@ -131,7 +142,7 @@ void setup()
 
 void loop()
 {
-    if (!crsfSelfTestPassed)
+    if (!startupSelfTestsPassed)
     {
         delay(10);
 
@@ -209,9 +220,6 @@ void loop()
     {
         case MaintenanceAction::Diagnostic:
         {
-            // Do not display stale RF health after the RC link
-            // has already been declared lost.
-
             if (
                 bridgeState.hasLinkStatistics() &&
                 !bridgeState.isReceiverLost()
@@ -240,10 +248,7 @@ void loop()
         {
             // Reserved.
             //
-            // The maintenance UI now recognizes and reports the
-            // Bind selection, but no CRSF bind command is sent yet.
-            //
-            // Protocol/path validation will be implemented separately.
+            // No receiver command is sent yet.
 
             break;
         }
@@ -253,10 +258,7 @@ void loop()
         {
             // Reserved.
             //
-            // The maintenance UI now recognizes and reports the
-            // Wi-Fi selection, but no CRSF Wi-Fi command is sent yet.
-            //
-            // Protocol/path validation will be implemented separately.
+            // No receiver command is sent yet.
 
             break;
         }

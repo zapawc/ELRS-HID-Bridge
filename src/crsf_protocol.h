@@ -2,17 +2,25 @@
 
 #include <stdint.h>
 
+
 namespace Crsf
 {
+    // -------------------------------------------------------------------------
+    // CRSF framing limits
+    // -------------------------------------------------------------------------
+
+    constexpr uint8_t MAX_FRAME_LENGTH = 62;
+
+    constexpr uint8_t MAX_FRAME_SIZE = 64;
+
+
     // -------------------------------------------------------------------------
     // CRSF serial synchronization
     // -------------------------------------------------------------------------
 
-    // The traditional CRSF serial sync byte.
+    // Traditional CRSF serial synchronization value.
     //
-    // This value is numerically identical to the Flight Controller
-    // device address, but CRSF framing also permits broadcast and
-    // other valid device addresses in the first byte.
+    // Numerically identical to the Flight Controller device address.
     constexpr uint8_t SYNC_BYTE = 0xC8;
 
 
@@ -50,13 +58,8 @@ namespace Crsf
 
     constexpr uint8_t ADDRESS_REMOTE_CONTROL = 0xEA;
     constexpr uint8_t ADDRESS_REPEATER_RECEIVER = 0xEB;
-
-    // Preserve the existing project names used elsewhere in the firmware.
     constexpr uint8_t ADDRESS_RECEIVER = 0xEC;
-
     constexpr uint8_t ADDRESS_REPEATER_TRANSMITTER = 0xED;
-
-    // Preserve the existing project name used elsewhere in the firmware.
     constexpr uint8_t ADDRESS_TRANSMITTER = 0xEE;
 
     constexpr uint8_t ADDRESS_RESERVED_F0 = 0xF0;
@@ -67,23 +70,22 @@ namespace Crsf
     // Frame-start validation
     // -------------------------------------------------------------------------
 
-    inline bool isValidSyncByte(uint8_t value)
+    inline bool isValidSyncByte(
+        uint8_t value
+    )
     {
-        // Serial sync byte / Flight Controller address.
         if (value == SYNC_BYTE)
         {
             return true;
         }
 
 
-        // Broadcast.
         if (value == ADDRESS_BROADCAST)
         {
             return true;
         }
 
 
-        // Dynamic/NAT address range.
         if (
             value >= ADDRESS_DYNAMIC_MIN &&
             value <= ADDRESS_DYNAMIC_MAX
@@ -93,7 +95,6 @@ namespace Crsf
         }
 
 
-        // ESC address range.
         if (
             value >= ADDRESS_ESC_MIN &&
             value <= ADDRESS_ESC_MAX
@@ -103,7 +104,6 @@ namespace Crsf
         }
 
 
-        // Remaining individually assigned CRSF device addresses.
         switch (value)
         {
             case ADDRESS_CLOUD:
@@ -137,6 +137,7 @@ namespace Crsf
                 return true;
             }
 
+
             default:
             {
                 return false;
@@ -146,11 +147,29 @@ namespace Crsf
 
 
     // -------------------------------------------------------------------------
-    // Frame types
+    // Broadcast frame types
     // -------------------------------------------------------------------------
 
     constexpr uint8_t FRAME_LINK_STATISTICS = 0x14;
+
     constexpr uint8_t FRAME_RC_CHANNELS = 0x16;
+
+
+    // -------------------------------------------------------------------------
+    // Extended frame types
+    // -------------------------------------------------------------------------
+
+    constexpr uint8_t FRAME_DEVICE_PING = 0x28;
+
+    constexpr uint8_t FRAME_DEVICE_INFO = 0x29;
+
+    constexpr uint8_t FRAME_PARAMETER_SETTINGS_ENTRY = 0x2B;
+
+    constexpr uint8_t FRAME_PARAMETER_READ = 0x2C;
+
+    constexpr uint8_t FRAME_PARAMETER_WRITE = 0x2D;
+
+    constexpr uint8_t FRAME_COMMAND = 0x32;
 
 
     // -------------------------------------------------------------------------
@@ -167,7 +186,9 @@ namespace Crsf
     // -------------------------------------------------------------------------
 
     constexpr uint8_t RC_CHANNEL_COUNT = 16;
+
     constexpr uint8_t RC_CHANNEL_BITS = 11;
+
     constexpr uint8_t RC_CHANNEL_PAYLOAD_SIZE = 22;
 
     constexpr uint16_t RC_CHANNEL_MASK = 0x07FF;
