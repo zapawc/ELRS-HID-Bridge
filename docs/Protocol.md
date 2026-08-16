@@ -1,6 +1,6 @@
 # CRSF Protocol Notes
 
-**Status:** Active pre-v1.0 implementation notes  
+**Status:** v1.0 release-candidate protocol baseline  
 **Updated:** August 2026
 
 ## 1. Supported Protocol
@@ -288,14 +288,14 @@ Local CRSF address  0xC8  Flight Controller
 Device name         ELRS-HID-Bridge
 Serial Number       0x45484231  ("EHB1" project-family ID)
 Hardware ID         0x51545059  ("QTPY" reference hardware)
-Firmware ID         0x00030000  (firmware 0.3.0)
+Firmware ID         0x01000000  (firmware 1.0.0 tuple)
 Parameters total    0
 Parameter version   0
 ```
 
 `0xC8` is retained because the bridge occupies the flight-controller side of the RP2 UART and that routing has been validated on the reference RP2/Ranger/EdgeTX path. `EHB1` and `QTPY` are deterministic project-defined identifiers rather than globally assigned IDs; the Serial Number field is not a per-unit unique serial number.
 
-The firmware ID is derived from `firmware_version.h` using `major << 24 | minor << 16 | patch << 8`, with the low byte reserved. The current `0.3.0-dev` tree therefore reports `0x00030000`; the `-dev` label is not encoded in the numeric CRSF field.
+The firmware ID is derived from `firmware_version.h` using `major << 24 | minor << 16 | patch << 8`, with the low byte reserved. The current `1.0.0-rc1` tree therefore reports `0x01000000`; the `-rc1` label is not encoded in the numeric CRSF field. Final `1.0.0` will intentionally report the same CRSF Firmware ID.
 
 Identity values remain isolated in `bridge_identity.h`, while firmware version is centralized in `firmware_version.h`. The generic construction layer still accepts caller-supplied address/identity data, so project policy remains separate from CRSF encoding mechanics.
 
@@ -425,11 +425,11 @@ The complete failsafe output policy is covered by a deterministic startup self-t
 
 ## 15. Planned Protocol Work
 
-Pre-v1.0 protocol scope:
+v1.0 release-candidate protocol scope:
 
 - identity-only Device Ping -> Device Info discovery is complete and hardware validated,
 - no additional CRSF feature work is required for v1.0,
-- keep the successful discovery path stable while release hardening proceeds,
+- keep the successful discovery path stable while release-candidate validation proceeds,
 - keep identity/version constants sourced from `bridge_identity.h` and `firmware_version.h`; no further CRSF identity work is required for v1.0.
 
 Post-v1.0 candidates:

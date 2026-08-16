@@ -9,12 +9,12 @@ namespace
 {
     bool runSemanticVersionTest()
     {
-        if (FirmwareVersion::MAJOR != 0)
+        if (FirmwareVersion::MAJOR != 1)
         {
             return false;
         }
 
-        if (FirmwareVersion::MINOR != 3)
+        if (FirmwareVersion::MINOR != 0)
         {
             return false;
         }
@@ -27,7 +27,7 @@ namespace
         if (
             strcmp(
                 FirmwareVersion::PRERELEASE,
-                "dev"
+                "rc1"
             ) != 0
         )
         {
@@ -37,7 +37,7 @@ namespace
         if (
             strcmp(
                 FirmwareVersion::STRING,
-                "0.3.0-dev"
+                "1.0.0-rc1"
             ) != 0
         )
         {
@@ -52,7 +52,7 @@ namespace
     {
         if (
             FirmwareVersion::CRSF_ID !=
-            0x00030000u
+            0x01000000u
         )
         {
             return false;

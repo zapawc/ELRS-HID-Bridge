@@ -1,6 +1,6 @@
 # ELRS HID Bridge Roadmap
 
-**Status:** Active v1.0 hardening  
+**Status:** v1.0.0-rc1 preparation and validation  
 **Updated:** August 2026
 
 ## 1. Project Direction
@@ -189,7 +189,7 @@ The first bidirectional feature is deliberately limited to identity discovery an
 - [x] derive CRSF Firmware ID from the canonical version source
 - [x] add deterministic version/identity startup self-test
 
-Current development version is `0.3.0-dev`; its packed CRSF Firmware ID is `0x00030000`. The CRSF Serial Number is a project-family identifier, not a per-unit unique hardware serial. The reusable Device Info builder still accepts caller-supplied address/identity values.
+Current release-candidate version is `1.0.0-rc1`; its packed CRSF Firmware ID is `0x01000000`. The prerelease suffix is not encoded, so final `1.0.0` intentionally uses the same numeric CRSF Firmware ID. The CRSF Serial Number is a project-family identifier, not a per-unit unique hardware serial. The reusable Device Info builder still accepts caller-supplied address/identity values.
 
 ### Proof-of-concept result
 
@@ -229,22 +229,25 @@ The discovery proof-of-concept is valuable because it validates the bidirectiona
 - [ ] final wiring guide validation
 - [ ] final EdgeTX setup guide validation
 - [x] capture and pin release-critical Arduino-Pico/toolchain/NeoPixel dependency versions
-- [ ] clean build from source on documented environment
-- [ ] release binary
+- [ ] clean `1.0.0-rc1` build from the documented `pico` environment
+- [ ] tested/staged release-candidate UF2 + SHA-256 manifest
 - [x] GPL-3.0-only license selected and added
 - [x] canonical firmware version source and CRSF Firmware ID encoding
 - [x] validate project-controlled USB descriptors on Windows (`BusReported = ELRS-HID-Bridge`)
 - [x] decide v1.0 USB identity policy: retain inherited `0x2E8A:0x000A`; document `joy.cpl` naming limitation
-- [ ] tag/release process
-- [x] README/Architecture/Protocol/Roadmap/Release synchronized through USB identity/build-capture checkpoint
-- [ ] final release-candidate documentation validation
+- [x] tag/GitHub Release procedure documented
+- [x] release-asset staging procedure documented
+- [x] README/Architecture/Protocol/Roadmap/Release synchronized for `1.0.0-rc1`
+- [ ] complete `docs/Release-Checklist.md` on the exact candidate commit
+- [ ] publish/observe RC as needed before final `1.0.0`
+- [ ] final `1.0.0` rebuild, regression, tag, and release
 
 ### Current next release gates
 
-1. Validate the newly pinned framework/toolchain/NeoPixel build on the reference hardware.
-2. Validate wiring and EdgeTX setup instructions from a clean-reader perspective.
-3. Validate a clean `pico` build from the pinned environment.
-4. Define the tag/release procedure, produce a tested release binary, and perform final documentation/regression validation.
+1. Build and flash `1.0.0-rc1` using the pinned normal `pico` environment.
+2. Run the complete `docs/Release-Checklist.md`, including wiring and EdgeTX setup validation from a clean-reader perspective.
+3. Stage the tested UF2/hash/manifest using `tools/Stage-Release.ps1` and verify it corresponds to the exact tested commit.
+4. Tag/publish `v1.0.0-rc1` as a pre-release if desired for observation, then close any release blockers before the final `1.0.0` transition.
 
 Windows descriptor validation is complete: both the USB parent and HID interface report `ELRS-HID-Bridge`, while `joy.cpl` still displays `Pico` with the inherited `0x2E8A:0x000A` VID/PID. This is now an identity-allocation decision rather than a product-string defect.
 
@@ -549,21 +552,25 @@ With live Device Info TX enabled:
 Keep these synchronized at every meaningful checkpoint:
 
 - `README.md`
+- `CHANGELOG.md`
 - `docs/Architecture.md`
 - `docs/Protocol.md`
 - `docs/Roadmap.md`
+- `docs/Release.md`
+- `docs/Release-Checklist.md`
 
-Before broader public announcement, also document:
+Before broader public announcement, also validate/document:
 
 - supported/reference hardware
 - exact wiring
 - tested ExpressLRS/EdgeTX configuration
 - current CH15/CH16 limitation
 - exact failsafe behavior including AUX axes
-- build/flash workflow
+- build/flash workflow and release UF2 artifact
 - Windows validation
 - simulator validation
 - current Device Ping/Device Info status
+- release-candidate checklist and checksum/manifest procedure
 - known limitations
 - bug-report guidance
 - contribution/fork guidance

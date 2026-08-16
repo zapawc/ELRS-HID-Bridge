@@ -1,41 +1,77 @@
-# Build Pinning Checkpoint
+# ELRS-HID-Bridge v1.0.0-rc1 Preparation Checkpoint
 
-## Purpose
+This checkpoint begins release-candidate validation. It intentionally freezes runtime behavior.
 
-Freeze the release-critical packages that produced the known-good hardware-tested firmware, while closing the v1.0 USB identity decision without changing runtime behavior.
+## Add / replace these files
 
-## Replace
+```text
+.gitignore
+CHANGELOG.md
+README.md
+CHANGESET.md
 
-- `platformio.ini`
-- `README.md`
-- `docs/Architecture.md`
-- `docs/Roadmap.md`
-- `docs/Release.md`
-- `docs/USB-Identity.md`
+src/
+    firmware_version.h
+    firmware_version_self_test.cpp
 
-## Known-good capture
+docs/
+    Architecture.md
+    Protocol.md
+    Release.md
+    Release-Checklist.md
+    Release-Notes-v1.0.0-rc1.md
+    Roadmap.md
+    USB-Identity.md
 
-- Project Git HEAD: `75aa4ff7fbdb05b3251452f5f14a736a22174744`
-- Raspberry Pi platform manifest: `1.20.0`
-- Arduino-Pico framework: `1.60000.0`
-- RP2040 toolchain: `5.160100.260719`
-- Adafruit NeoPixel: `1.15.5`
+tools/
+    Stage-Release.ps1
+```
 
-## Expected behavior
+No `main.cpp`, CRSF parser/dispatcher, UART, HID mapping, failsafe, LED, or maintenance-controller behavior changes are included.
 
-No runtime behavior should change. USB product identity remains `ELRS-HID-Bridge`; inherited VID/PID remains `2E8A:000A`; `joy.cpl` may continue to show `Pico`.
+## Behavioral change
 
-## Test gate
+Only firmware/release identity changes:
 
-1. Build the normal `pico` environment in VS Code/PlatformIO.
-2. Confirm no new Problems/build errors.
-3. Flash normally.
-4. Verify axes/buttons and LED states.
-5. Verify TX-off failsafe and automatic reconnect.
-6. Verify Liftoff behavior/performance.
-7. Verify `ELRS-HID-Bridge` still appears under EdgeTX **Other Devices**.
-8. Optional: rerun `tools/Capture-BuildEnvironment.ps1`; framework/toolchain/NeoPixel values should match the pinned versions.
+```text
+0.3.0-dev -> 1.0.0-rc1
+CRSF Firmware ID -> 0x01000000
+```
+
+The CRSF prerelease suffix is not encoded, so final `1.0.0` will intentionally use the same numeric CRSF Firmware ID.
+
+## Validation order
+
+1. Extract this changeset over the repository root.
+2. Use the normal VS Code PlatformIO workflow to build the `pico` environment.
+3. Confirm no build errors / new VS Code Problems.
+4. Flash the candidate.
+5. Run `docs/Release-Checklist.md` against the exact candidate commit.
+6. Confirm Liftoff performance and EdgeTX **Other Devices** discovery remain unchanged.
+7. After the candidate has passed hardware testing, run:
+
+   ```powershell
+   .\tools\Stage-Release.ps1
+   ```
+
+8. Confirm the staged files exist under `dist/`:
+
+   ```text
+   ELRS-HID-Bridge-v1.0.0-rc1.uf2
+   ELRS-HID-Bridge-v1.0.0-rc1.sha256.txt
+   RELEASE-MANIFEST.txt
+   ```
+
+9. Do not tag/publish the release candidate until the checklist passes and the manifest refers to the exact tested commit.
+
+## Release artifact rule
+
+`Stage-Release.ps1` does not invoke PlatformIO. It copies the already-built `.pio/build/pico/firmware.uf2`, reads the canonical version from `src/firmware_version.h`, and generates release naming/hash metadata.
+
+`dist/` is now ignored by Git so staged binaries are not accidentally committed.
 
 ## Suggested commit
 
-`Pin known-good release build dependencies`
+```text
+Prepare v1.0.0-rc1 release candidate
+```

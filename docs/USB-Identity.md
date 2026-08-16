@@ -1,6 +1,6 @@
 # USB Identity Policy
 
-**Status:** Pre-v1.0 identity hardening  
+**Status:** v1.0 policy fixed  
 **Updated:** August 2026
 
 ## 1. Purpose
@@ -63,9 +63,9 @@ That pair is functional, but it does not give ELRS-HID-Bridge a distinct USB dev
 
 The project must not invent a random VID/PID or claim a PID under a VID it does not control.
 
-## 4. Recommended v1.0 Direction
+## 4. Optional Post-v1.0 Direction
 
-The preferred direction is to request a dedicated PID for ELRS-HID-Bridge from **pid.codes** under open-source VID `0x1209`.
+If future distribution or production needs justify a distinct USB identity, the preferred open-source path is to request a dedicated PID for ELRS-HID-Bridge from **pid.codes** under open-source VID `0x1209`. This is not required for v1.0.
 
 Reasons:
 
@@ -81,9 +81,9 @@ Important qualification:
 
 The project should document that fact rather than presenting a pid.codes allocation as an official USB-IF assignment.
 
-## 5. pid.codes Request Requirements
+## 5. Future pid.codes Request Requirements
 
-The pid.codes request should be made only when the repository is ready to support the requested identity.
+A future pid.codes request should be made only when the repository is ready to support the requested identity and there is a clear operational reason to change the v1.0 policy.
 
 Their published prerequisites include:
 
@@ -124,19 +124,16 @@ Then perform a dedicated USB identity regression:
 8. Verify Liftoff operation.
 9. Verify EdgeTX **Other Devices** discovery remains unaffected.
 
-Changing VID/PID is an identity change, not a CRSF/HID feature change, but it still requires a full release regression before v1.0.
+Changing VID/PID is an identity change, not a CRSF/HID feature change, but any future VID/PID change still requires a full release regression.
 
-## 7. Alternative
+## 7. Current Reference Identity
 
-If a project-specific PID is not obtained before v1.0, the inherited `0x2E8A:0x000A` identity can remain technically functional.
-
-If that path is chosen, v1.0 documentation must explicitly state that:
+The inherited `0x2E8A:0x000A` identity is the deliberate v1.0 reference policy, not a temporary unmade decision. Documentation should consistently state that:
 
 - USB descriptors report `ELRS-HID-Bridge`,
 - some Windows game-controller views may still show `Pico`,
-- this is a consequence of the inherited USB VID/PID rather than the HID firmware identity.
-
-The decision should be explicit rather than accidental.
+- this is a consequence of the inherited USB VID/PID rather than an incorrect HID product descriptor,
+- no registry cleanup or custom driver is required for normal operation.
 
 
 ## v1.0 Decision

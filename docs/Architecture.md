@@ -1,6 +1,6 @@
 # ELRS HID Bridge Architecture
 
-**Status:** Pre-v1.0 architecture baseline  
+**Status:** v1.0 release-candidate architecture baseline  
 **Updated:** August 2026
 
 ## 1. Purpose
@@ -380,14 +380,14 @@ This separation is intentional: `CrsfDevice` owns protocol mechanics, while proj
 Current version:
 
 ```text
-0.3.0-dev
+1.0.0-rc1
 ```
 
 The CRSF `Firmware_ID` packs the semantic version tuple into the upper 24 bits of a `uint32_t`; the low byte is reserved and currently zero. The prerelease label is human-readable metadata and is not encoded into the CRSF numeric field.
 
 `FirmwareVersionSelfTest` verifies the canonical tuple/string and confirms that `BridgeIdentity::CRSF_FIRMWARE_ID` consumes this source rather than maintaining a second independent version constant.
 
-This keeps version policy separate from CRSF encoding mechanics and gives future release/tag tooling one firmware version source to update.
+This keeps version policy separate from CRSF encoding mechanics and gives release/tag tooling one firmware version source to update. `1.0.0-rc1` and final `1.0.0` intentionally share CRSF Firmware ID `0x01000000` because prerelease labels are not encoded.
 
 ### 5.11 BridgeState
 
@@ -520,7 +520,7 @@ The USB product/manufacturer descriptors are configured through `platformio.ini`
 
 Windows hardware validation confirmed that the USB composite parent and HID interface both report `ELRS-HID-Bridge` through `DEVPKEY_Device_BusReportedDeviceDesc`. The current build still inherits VID/PID `0x2E8A:0x000A`; `joy.cpl` may therefore retain/display `Pico` even though the project-controlled product descriptor is correct.
 
-USB VID/PID allocation is treated as release/deployment identity policy rather than HID transport logic. Do not hard-code an unassigned project VID/PID in `UsbHid`. The preferred v1.0 path is a dedicated open-source PID allocation under VID `0x1209`, documented in `docs/USB-Identity.md`.
+USB VID/PID allocation is treated as release/deployment identity policy rather than HID transport logic. For v1.0, the reference build intentionally retains the inherited `0x2E8A:0x000A` identity. The project-controlled product/interface strings are validated as `ELRS-HID-Bridge`; the remaining Windows `joy.cpl` `Pico` label is documented as cosmetic. A dedicated VID/PID may be reconsidered after v1.0 if distribution needs justify it. See `docs/USB-Identity.md`.
 
 It remains unaware of CRSF details.
 
@@ -878,3 +878,7 @@ Features that merely implement a specific end application should generally remai
 The v1.0 reference build pins the hardware-tested Arduino-Pico framework (`1.60000.0`), RP2040 toolchain (`5.160100.260719`), and Adafruit NeoPixel (`1.15.5`) packages in `platformio.ini`. Build-system dependency changes are release-affecting changes and require the normal hardware regression suite.
 
 The USB product/interface descriptors remain `ELRS-HID-Bridge`, while the v1.0 reference build intentionally retains inherited VID/PID `0x2E8A:0x000A`. Windows `joy.cpl` may display `Pico`; this does not alter HID behavior or the bus-reported product identity.
+
+The `1.0.0-rc1` cycle freezes runtime behavior and treats packaging as a separate release boundary. The normal `pico` build produces `.pio/build/pico/firmware.uf2`; `tools/Stage-Release.ps1` copies that already-built artifact into `dist/` with the canonical version in the filename and records a SHA-256 hash plus source commit when available. The staging tool deliberately does not invoke PlatformIO, so artifact construction remains the same proven VS Code/PlatformIO workflow.
+
+`dist/` is ignored by Git. Published binaries must correspond to the exact source commit/tag that was built and hardware-tested. See `docs/Release.md` and `docs/Release-Checklist.md`.

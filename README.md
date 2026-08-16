@@ -15,10 +15,10 @@ No display, external pushbutton, custom PCB, custom USB driver, or mandatory com
 
 ## Project Status
 
-**Current Version:** 0.3.0-dev  
-**Status:** Active v1.0 hardening
+**Current Version:** 1.0.0-rc1  
+**Status:** v1.0 release candidate validation
 
-The core wireless joystick path is functional and has been validated in Liftoff.
+The core wireless joystick path is functional and has been validated in Liftoff. Runtime behavior is now frozen for the `1.0.0-rc1` validation cycle; remaining work is release regression, clean-reader documentation validation, and packaging of the tested UF2 artifact.
 
 ### Proven on hardware
 
@@ -57,7 +57,7 @@ Validated behavior:
 - The discovery identity exposes zero CRSF parameters.
 - CRSF Serial/Hardware IDs are stable project-defined identifiers for the reference build.
 - CRSF Firmware ID is derived from the canonical firmware version in `firmware_version.h`.
-- `0.3.0-dev` encodes as CRSF Firmware ID `0x00030000`.
+- `1.0.0-rc1` encodes as CRSF Firmware ID `0x01000000`. The `-rc1` prerelease label is intentionally not encoded in the numeric CRSF field.
 
 CRSF feature expansion is now frozen for the v1.0 cycle. The project is moving through release hardening rather than adding a parameter tree or other outbound protocol features.
 
@@ -380,7 +380,7 @@ The project uses:
 
 - Visual Studio Code
 - PlatformIO
-- RP2040 Arduino core/toolchain used by the project environment
+- the pinned Arduino-Pico framework/toolchain declared in `platformio.ini`
 - TinyUSB/HID support provided by the selected framework
 
 Clone the repository:
@@ -389,13 +389,40 @@ Clone the repository:
 git clone https://github.com/zapawc/ELRS-HID-Bridge.git
 ```
 
-Open the project in Visual Studio Code with the PlatformIO extension installed, then use the normal PlatformIO build/upload controls for the selected environment.
+Open the project in Visual Studio Code with the PlatformIO extension installed, then use the normal PlatformIO **Build** / **Upload** controls.
 
-Use the `pico` environment for the normal HID-only release build. Use `pico_debug` only when USB CDC debug logging is required.
+Use:
 
-The project intentionally prefers the normal VS Code/PlatformIO workflow for routine builds and uploads. Direct `pio` CLI commands are mainly useful when troubleshooting requires them.
+```text
+pico        normal HID-only release build
+pico_debug  HID + USB CDC debug logging
+```
 
-Release/version policy and the remaining v1.0 gates are documented in `docs/Release.md`.
+The project intentionally prefers the normal VS Code/PlatformIO workflow for routine builds and uploads. Direct `pio` CLI commands are mainly a troubleshooting tool and are not required by the reference workflow.
+
+### Release UF2
+
+After a successful normal `pico` build, PlatformIO produces the release-candidate UF2 at:
+
+```text
+.pio/build/pico/firmware.uf2
+```
+
+For a published release, use the versioned UF2 attached to the corresponding GitHub Release, for example:
+
+```text
+ELRS-HID-Bridge-v1.0.0-rc1.uf2
+```
+
+For manual flashing, use the QT Py RP2040's normal BOOTSEL/UF2 procedure. When the RP2040 mass-storage boot device appears, copy the UF2 onto it.
+
+Release maintainers can stage the already-built UF2, SHA-256 checksum, and release manifest without invoking PlatformIO:
+
+```powershell
+.\tools\Stage-Release.ps1
+```
+
+Release/version policy is documented in `docs/Release.md`; the complete release-candidate hardware regression is in `docs/Release-Checklist.md`.
 
 ---
 
@@ -457,7 +484,7 @@ Not implemented yet:
 - CRSF parameter tree
 - persistent configuration
 
-Identity-only discovery has succeeded cleanly. Version/identity metadata is now centralized for release hardening. Full transmitter-side configuration remains post-v1.0 work; v1.0 now prioritizes documentation validation, reproducible builds, licensing, and release packaging.
+Identity-only discovery has succeeded cleanly. Version/identity metadata is now centralized for release hardening. Full transmitter-side configuration remains post-v1.0 work. Runtime behavior is frozen for the release-candidate cycle; the remaining work is clean-build validation, documentation verification, release-binary staging, and final regression.
 
 ---
 
@@ -465,10 +492,10 @@ Identity-only discovery has succeeded cleanly. Version/identity metadata is now 
 
 `src/firmware_version.h` is the canonical firmware version source.
 
-Current development version:
+Current release-candidate version:
 
 ```text
-0.3.0-dev
+1.0.0-rc1
 ```
 
 The CRSF Device Info `Firmware_ID` is derived from the same constants using:
@@ -480,7 +507,7 @@ bits 15..8   patch
 bits 7..0    reserved (0)
 ```
 
-For `0.3.0-dev`, the numeric CRSF Firmware ID is `0x00030000`. The human-readable prerelease label is intentionally not encoded into that CRSF field.
+For `1.0.0-rc1`, the numeric CRSF Firmware ID is `0x01000000`. The human-readable `-rc1` prerelease label is intentionally not encoded into that CRSF field, so the final `1.0.0` release will use the same numeric CRSF Firmware ID.
 
 A startup self-test verifies that the version string/tuple and the CRSF identity remain synchronized.
 
@@ -491,11 +518,23 @@ Version tags and final release-number transition policy are tracked in `docs/Rel
 ## Repository Layout
 
 ```text
+CHANGELOG.md
+LICENSE
+AUTHORS.md
+THIRD_PARTY_NOTICES.md
+
 docs/
     Architecture.md
     Protocol.md
     Release.md
+    Release-Checklist.md
+    Release-Notes-v1.0.0-rc1.md
     Roadmap.md
+    USB-Identity.md
+
+tools/
+    Capture-BuildEnvironment.ps1
+    Stage-Release.ps1
 
 src/
     ...
@@ -549,9 +588,9 @@ See `docs/Roadmap.md`.
 
 ## License
 
-License selection is pending.
+ELRS-HID-Bridge is licensed under the **GNU General Public License v3.0 only (`GPL-3.0-only`)**.
 
-An open-source license should be selected before Version 1.0.
+Distributed derivative firmware remains covered by the GPL terms. See `LICENSE`, `AUTHORS.md`, and `THIRD_PARTY_NOTICES.md` for the project license, attribution, and third-party dependency notices.
 
 ---
 
