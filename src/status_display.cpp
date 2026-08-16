@@ -14,9 +14,14 @@ void StatusDisplay::reset()
     mode =
         DisplayMode::Normal;
 
-    diagnosticStartMs = 0;
 
-    normalStatusRendered = false;
+    diagnosticStartMs =
+        0;
+
+
+    normalStatusRendered =
+        false;
+
 
     lastNormalStatus =
         SystemStatus::Startup;
@@ -88,6 +93,89 @@ void StatusDisplay::showDiagnosticUnavailable(
 }
 
 
+void StatusDisplay::showMaintenanceBind()
+{
+    if (
+        mode ==
+        DisplayMode::FatalError
+    )
+    {
+        return;
+    }
+
+
+    mode =
+        DisplayMode::Maintenance;
+
+
+    led.showMaintenanceBind();
+}
+
+
+void StatusDisplay::showMaintenanceWifi()
+{
+    if (
+        mode ==
+        DisplayMode::FatalError
+    )
+    {
+        return;
+    }
+
+
+    mode =
+        DisplayMode::Maintenance;
+
+
+    led.showMaintenanceWifi();
+}
+
+
+void StatusDisplay::showMaintenanceCancel()
+{
+    if (
+        mode ==
+        DisplayMode::FatalError
+    )
+    {
+        return;
+    }
+
+
+    mode =
+        DisplayMode::Maintenance;
+
+
+    led.showMaintenanceCancel();
+}
+
+
+void StatusDisplay::clearMaintenance()
+{
+    if (
+        mode ==
+        DisplayMode::FatalError
+    )
+    {
+        return;
+    }
+
+
+    if (
+        mode ==
+        DisplayMode::Maintenance
+    )
+    {
+        mode =
+            DisplayMode::Normal;
+
+
+        normalStatusRendered =
+            false;
+    }
+}
+
+
 void StatusDisplay::update(
     uint32_t nowMs,
     const BridgeState& state
@@ -96,7 +184,7 @@ void StatusDisplay::update(
     // -------------------------------------------------------------------------
     // Fatal error
     //
-    // Nothing may overwrite a fatal startup/self-test failure.
+    // Highest priority.
     // -------------------------------------------------------------------------
 
     if (
@@ -109,12 +197,27 @@ void StatusDisplay::update(
 
 
     // -------------------------------------------------------------------------
+    // Maintenance selection
+    //
+    // While the user deliberately holds the BOOT button beyond a maintenance
+    // threshold, the selected action remains visible.
+    //
+    // This intentionally has priority over normal runtime status.
+    // -------------------------------------------------------------------------
+
+    if (
+        mode ==
+        DisplayMode::Maintenance
+    )
+    {
+        return;
+    }
+
+
+    // -------------------------------------------------------------------------
     // Receiver loss
     //
-    // Preserve existing behavior:
-    //
-    // RC failsafe/loss immediately cancels any temporary diagnostic
-    // indication so that the purple receiver-loss state is visible.
+    // Receiver loss interrupts a temporary diagnostic display.
     // -------------------------------------------------------------------------
 
     if (state.isReceiverLost())
@@ -126,6 +229,7 @@ void StatusDisplay::update(
         {
             mode =
                 DisplayMode::Normal;
+
 
             normalStatusRendered =
                 false;
@@ -163,8 +267,6 @@ void StatusDisplay::update(
             DisplayMode::Normal;
 
 
-        // Force restoration of the current normal color even if it
-        // matches the normal status that existed before diagnostics.
         normalStatusRendered =
             false;
     }
@@ -221,10 +323,6 @@ void StatusDisplay::renderNormal(
         );
 
 
-    // Avoid rewriting the NeoPixel on every pass through loop().
-    //
-    // Only update the physical LED when the desired normal state
-    // actually changes, or when returning from another display mode.
     if (
         normalStatusRendered &&
         desiredStatus ==
@@ -242,6 +340,7 @@ void StatusDisplay::renderNormal(
 
     lastNormalStatus =
         desiredStatus;
+
 
     normalStatusRendered =
         true;

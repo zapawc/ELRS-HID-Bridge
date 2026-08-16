@@ -10,6 +10,7 @@
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
 #include "failsafe_policy.h"
+#include "maintenance_controller.h"
 #include "normalized_channels.h"
 #include "raw_channels.h"
 #include "status_display.h"
@@ -24,12 +25,6 @@ ChannelState channelState;
 
 // -----------------------------------------------------------------------------
 // Configuration
-//
-// The reference firmware currently uses compiled defaults only.
-//
-// Future persistent storage and CRSF parameter configuration can modify this
-// canonical model without requiring ChannelMapper or the rest of the runtime
-// path to own configuration policy.
 // -----------------------------------------------------------------------------
 
 BridgeConfiguration bridgeConfiguration =
@@ -38,26 +33,37 @@ BridgeConfiguration bridgeConfiguration =
 
 ChannelNormalizer channelNormalizer;
 
+
 ChannelMapper channelMapper(
     bridgeConfiguration
 );
 
+
 FailsafePolicy failsafePolicy;
+
 
 UsbHid usbHid;
 
+
 StatusLed statusLed;
+
 
 StatusDisplay statusDisplay(
     statusLed
 );
 
+
 BootButton bootButton;
+
+MaintenanceController maintenanceController;
+
 
 CrsfUart crsfUart;
 CrsfDecoder crsfDecoder;
 
+
 BridgeState bridgeState;
+
 
 bool crsfSelfTestPassed = false;
 
@@ -65,11 +71,17 @@ bool crsfSelfTestPassed = false;
 void setup()
 {
     statusLed.begin();
+
     statusDisplay.reset();
+
 
     bootButton.begin();
 
+    maintenanceController.reset();
+
+
     bridgeState.reset();
+
 
     usbHid.begin();
 
@@ -110,8 +122,6 @@ void setup()
     );
 
 
-    // Transition from the startup indication to the current
-    // normal bridge state.
     statusDisplay.update(
         millis(),
         bridgeState
@@ -130,44 +140,133 @@ void loop()
 
 
     // -------------------------------------------------------------------------
-    // BOOT button
+    // BOOT button / maintenance UI
     // -------------------------------------------------------------------------
 
-    const BootButtonEvent buttonEvent =
+    const BootButtonState buttonState =
         bootButton.update();
 
 
+    const MaintenanceUpdate maintenanceUpdate =
+        maintenanceController.update(
+            buttonState
+        );
+
+
+    // -------------------------------------------------------------------------
+    // Maintenance selection display
+    // -------------------------------------------------------------------------
+
     if (
-        buttonEvent ==
-        BootButtonEvent::ShortPress
+        maintenanceUpdate.selectionChanged
     )
     {
-        // Do not display stale RF health after the RC link has
-        // already been declared lost.
-
-        if (
-            bridgeState.hasLinkStatistics() &&
-            !bridgeState.isReceiverLost()
+        switch (
+            maintenanceUpdate.selection
         )
         {
-            statusDisplay.showLinkQuality(
-                bridgeState
-                    .linkStatistics()
-                    .uplinkLinkQuality,
-                millis()
-            );
-        }
-        else
-        {
-            statusDisplay.showDiagnosticUnavailable(
-                millis()
-            );
+            case MaintenanceSelection::Bind:
+            {
+                statusDisplay.showMaintenanceBind();
+
+                break;
+            }
+
+
+            case MaintenanceSelection::Wifi:
+            {
+                statusDisplay.showMaintenanceWifi();
+
+                break;
+            }
+
+
+            case MaintenanceSelection::Cancel:
+            {
+                statusDisplay.showMaintenanceCancel();
+
+                break;
+            }
+
+
+            case MaintenanceSelection::None:
+            {
+                statusDisplay.clearMaintenance();
+
+                break;
+            }
         }
     }
 
 
-    // Long/very-long presses remain reserved for future
-    // maintenance actions.
+    // -------------------------------------------------------------------------
+    // Maintenance action on release
+    // -------------------------------------------------------------------------
+
+    switch (
+        maintenanceUpdate.action
+    )
+    {
+        case MaintenanceAction::Diagnostic:
+        {
+            // Do not display stale RF health after the RC link
+            // has already been declared lost.
+
+            if (
+                bridgeState.hasLinkStatistics() &&
+                !bridgeState.isReceiverLost()
+            )
+            {
+                statusDisplay.showLinkQuality(
+                    bridgeState
+                        .linkStatistics()
+                        .uplinkLinkQuality,
+                    millis()
+                );
+            }
+            else
+            {
+                statusDisplay.showDiagnosticUnavailable(
+                    millis()
+                );
+            }
+
+
+            break;
+        }
+
+
+        case MaintenanceAction::BindRequested:
+        {
+            // Reserved.
+            //
+            // The maintenance UI now recognizes and reports the
+            // Bind selection, but no CRSF bind command is sent yet.
+            //
+            // Protocol/path validation will be implemented separately.
+
+            break;
+        }
+
+
+        case MaintenanceAction::WifiRequested:
+        {
+            // Reserved.
+            //
+            // The maintenance UI now recognizes and reports the
+            // Wi-Fi selection, but no CRSF Wi-Fi command is sent yet.
+            //
+            // Protocol/path validation will be implemented separately.
+
+            break;
+        }
+
+
+        case MaintenanceAction::None:
+        {
+            break;
+        }
+    }
 
 
     // -------------------------------------------------------------------------
@@ -202,7 +301,9 @@ void loop()
     // Process RC channel frames
     // -------------------------------------------------------------------------
 
-    if (crsfDecoder.hasNewChannels())
+    if (
+        crsfDecoder.hasNewChannels()
+    )
     {
         rawChannels =
             crsfDecoder.getChannels();
@@ -264,11 +365,7 @@ void loop()
 
 
     // -------------------------------------------------------------------------
-    // Status display
-    //
-    // StatusDisplay owns LED arbitration. Runtime code reports facts and
-    // requests temporary indications; it no longer decides which normal
-    // color should currently be displayed.
+    // Status display arbitration
     // -------------------------------------------------------------------------
 
     statusDisplay.update(

@@ -2,18 +2,17 @@
 
 #include "boot_button.h"
 
+
 namespace
 {
     // QT Py RP2040 onboard BOOT button.
     //
-    // We currently build against the generic Pico target, so use
-    // the actual RP2040 GPIO number rather than a board alias.
+    // The project currently builds against the generic Pico target,
+    // so use the actual RP2040 GPIO number.
     constexpr uint8_t BOOT_BUTTON_PIN = 21;
 
-    constexpr uint32_t DEBOUNCE_MS = 30;
 
-    constexpr uint32_t LONG_PRESS_MS = 3000;
-    constexpr uint32_t VERY_LONG_PRESS_MS = 10000;
+    constexpr uint32_t DEBOUNCE_MS = 30;
 }
 
 
@@ -24,14 +23,20 @@ void BootButton::begin()
         INPUT_PULLUP
     );
 
+
     lastRawPressed =
-        digitalRead(BOOT_BUTTON_PIN) == LOW;
+        digitalRead(
+            BOOT_BUTTON_PIN
+        ) == LOW;
+
 
     stablePressed =
         lastRawPressed;
 
+
     lastChangeMs =
         millis();
+
 
     if (stablePressed)
     {
@@ -41,58 +46,108 @@ void BootButton::begin()
 }
 
 
-BootButtonEvent BootButton::update()
+BootButtonState BootButton::update()
 {
     const uint32_t now =
         millis();
 
-    const bool rawPressed =
-        digitalRead(BOOT_BUTTON_PIN) == LOW;
 
-    // Raw state changed. Start the debounce timer again.
-    if (rawPressed != lastRawPressed)
+    BootButtonState state;
+
+
+    const bool rawPressed =
+        digitalRead(
+            BOOT_BUTTON_PIN
+        ) == LOW;
+
+
+    // -------------------------------------------------------------------------
+    // Raw-state change
+    //
+    // Restart the debounce interval whenever the electrical state changes.
+    // -------------------------------------------------------------------------
+
+    if (
+        rawPressed !=
+        lastRawPressed
+    )
     {
         lastRawPressed =
             rawPressed;
+
 
         lastChangeMs =
             now;
     }
 
-    // Wait until the new state has remained stable long enough.
+
+    // -------------------------------------------------------------------------
+    // Debounced transition
+    // -------------------------------------------------------------------------
+
     if (
-        rawPressed != stablePressed &&
-        (now - lastChangeMs) >= DEBOUNCE_MS
+        rawPressed !=
+            stablePressed &&
+        (now - lastChangeMs) >=
+            DEBOUNCE_MS
     )
     {
         stablePressed =
             rawPressed;
 
+
         if (stablePressed)
         {
-            // Button has just become pressed.
+            // Button has just become stably pressed.
+
             pressStartMs =
                 now;
 
-            return BootButtonEvent::None;
+
+            state.pressed =
+                true;
+
+            state.pressedEvent =
+                true;
+
+            state.durationMs =
+                0;
+
+
+            return state;
         }
 
-        // Button has just been released.
-        const uint32_t pressDuration =
+
+        // Button has just become stably released.
+
+        state.pressed =
+            false;
+
+        state.releasedEvent =
+            true;
+
+        state.durationMs =
             now - pressStartMs;
 
-        if (pressDuration >= VERY_LONG_PRESS_MS)
-        {
-            return BootButtonEvent::VeryLongPress;
-        }
 
-        if (pressDuration >= LONG_PRESS_MS)
-        {
-            return BootButtonEvent::LongPress;
-        }
-
-        return BootButtonEvent::ShortPress;
+        return state;
     }
 
-    return BootButtonEvent::None;
+
+    // -------------------------------------------------------------------------
+    // Stable current state
+    // -------------------------------------------------------------------------
+
+    state.pressed =
+        stablePressed;
+
+
+    if (stablePressed)
+    {
+        state.durationMs =
+            now - pressStartMs;
+    }
+
+
+    return state;
 }

@@ -15,37 +15,38 @@ public:
 
 
     // Reset display arbitration state.
-    //
-    // StatusLed::begin() remains responsible for physically
-    // initializing the onboard NeoPixel and showing Startup.
     void reset();
 
 
-    // Enter a persistent fatal-error display.
-    //
-    // Once entered, normal runtime state and temporary diagnostics
-    // cannot overwrite the error indication.
+    // Persistent fatal startup/self-test failure.
     void showFatalError();
 
 
-    // Temporarily display current Link Quality.
+    // Temporary diagnostic indications.
     void showLinkQuality(
         uint8_t linkQuality,
         uint32_t nowMs
     );
 
 
-    // Temporarily acknowledge a diagnostic request when no current
-    // Link Statistics are available.
     void showDiagnosticUnavailable(
         uint32_t nowMs
     );
 
 
-    // Reconcile the physical LED with current bridge state and any
-    // active temporary display.
+    // Maintenance-selection indications.
     //
-    // Call frequently from loop().
+    // These remain active until clearMaintenance() is called.
+    void showMaintenanceBind();
+
+    void showMaintenanceWifi();
+
+    void showMaintenanceCancel();
+
+    void clearMaintenance();
+
+
+    // Reconcile physical LED output with current bridge state.
     void update(
         uint32_t nowMs,
         const BridgeState& state
@@ -57,6 +58,7 @@ private:
     {
         Normal,
         Diagnostic,
+        Maintenance,
         FatalError
     };
 
@@ -76,6 +78,7 @@ private:
 
 
     bool normalStatusRendered = false;
+
 
     SystemStatus lastNormalStatus =
         SystemStatus::Startup;
