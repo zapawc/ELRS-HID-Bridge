@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-
 #include "crsf_device.h"
 #include "crsf_dispatcher.h"
 #include "crsf_parser.h"
@@ -64,6 +63,26 @@ public:
 
 
     void clearDevicePing();
+
+
+    bool hasParameterRead() const;
+
+
+    const CrsfParameterRead&
+    getParameterRead() const;
+
+
+    void clearParameterRead();
+
+
+    bool hasParameterWrite() const;
+
+
+    const CrsfParameterWrite&
+    getParameterWrite() const;
+
+
+    void clearParameterWrite();
 
 
 private:

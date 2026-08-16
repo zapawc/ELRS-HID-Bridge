@@ -6,7 +6,6 @@ BridgeConfiguration::defaults()
 {
     BridgeConfiguration config;
 
-
     // -------------------------------------------------------------------------
     // Primary controls
     //
@@ -25,7 +24,6 @@ BridgeConfiguration::defaults()
 
     config.roll.channel =
         ChannelIndex::CH1;
-
     config.roll.inverted =
         false;
 
@@ -39,7 +37,6 @@ BridgeConfiguration::defaults()
 
     config.throttle.channel =
         ChannelIndex::CH3;
-
     config.throttle.inverted =
         false;
 
@@ -228,6 +225,18 @@ BridgeConfiguration::defaults()
 
     config.receiverTimeoutMs =
         500;
+
+
+    // -------------------------------------------------------------------------
+    // Status LED
+    //
+    // The pre-parameter implementation used NeoPixel brightness 24/255
+    // (~9.4%). Ten percent preserves the established visual level closely
+    // while presenting a clean 0-100% user-facing setting.
+    // -------------------------------------------------------------------------
+
+    config.ledBrightnessPercent =
+        10;
 
 
     return config;

@@ -96,3 +96,45 @@ void CrsfDecoder::clearDevicePing()
 {
     dispatcher.clearDevicePing();
 }
+
+
+bool CrsfDecoder::hasParameterRead() const
+{
+    return
+        dispatcher.hasParameterRead();
+}
+
+
+const CrsfParameterRead&
+CrsfDecoder::getParameterRead() const
+{
+    return
+        dispatcher.getParameterRead();
+}
+
+
+void CrsfDecoder::clearParameterRead()
+{
+    dispatcher.clearParameterRead();
+}
+
+
+bool CrsfDecoder::hasParameterWrite() const
+{
+    return
+        dispatcher.hasParameterWrite();
+}
+
+
+const CrsfParameterWrite&
+CrsfDecoder::getParameterWrite() const
+{
+    return
+        dispatcher.getParameterWrite();
+}
+
+
+void CrsfDecoder::clearParameterWrite()
+{
+    dispatcher.clearParameterWrite();
+}

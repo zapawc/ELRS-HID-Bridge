@@ -1,5 +1,4 @@
 #pragma once
-
 #include <stdint.h>
 
 
@@ -35,7 +34,6 @@ namespace Crsf
     constexpr uint8_t ADDRESS_BLUETOOTH_WIFI = 0x12;
     constexpr uint8_t ADDRESS_WIFI_RECEIVER = 0x13;
     constexpr uint8_t ADDRESS_VIDEO_RECEIVER = 0x14;
-
     constexpr uint8_t ADDRESS_DYNAMIC_MIN = 0x20;
     constexpr uint8_t ADDRESS_DYNAMIC_MAX = 0x7F;
 
@@ -117,7 +115,6 @@ namespace Crsf
 
             case ADDRESS_CROSSFIRE_RESERVED_B0:
             case ADDRESS_CROSSFIRE_RESERVED_B2:
-
             case ADDRESS_CURRENT_SENSOR:
             case ADDRESS_GPS:
             case ADDRESS_BLACKBOX:
@@ -130,7 +127,6 @@ namespace Crsf
             case ADDRESS_RECEIVER:
             case ADDRESS_REPEATER_TRANSMITTER:
             case ADDRESS_TRANSMITTER:
-
             case ADDRESS_RESERVED_F0:
             case ADDRESS_RESERVED_F2:
             {
@@ -151,7 +147,6 @@ namespace Crsf
     // -------------------------------------------------------------------------
 
     constexpr uint8_t FRAME_LINK_STATISTICS = 0x14;
-
     constexpr uint8_t FRAME_RC_CHANNELS = 0x16;
 
 
@@ -170,6 +165,22 @@ namespace Crsf
     constexpr uint8_t FRAME_PARAMETER_WRITE = 0x2D;
 
     constexpr uint8_t FRAME_COMMAND = 0x32;
+
+
+    // -------------------------------------------------------------------------
+    // CRSF parameter data types
+    //
+    // Integer parameter types 0x00-0x05 exist for legacy compatibility but
+    // are deliberately not introduced here. New numeric settings use FLOAT.
+    // -------------------------------------------------------------------------
+
+    constexpr uint8_t PARAMETER_TYPE_FLOAT = 0x08;
+    constexpr uint8_t PARAMETER_TYPE_TEXT_SELECTION = 0x09;
+    constexpr uint8_t PARAMETER_TYPE_STRING = 0x0A;
+    constexpr uint8_t PARAMETER_TYPE_FOLDER = 0x0B;
+    constexpr uint8_t PARAMETER_TYPE_INFO = 0x0C;
+    constexpr uint8_t PARAMETER_TYPE_COMMAND = 0x0D;
+    constexpr uint8_t PARAMETER_TYPE_OUT_OF_RANGE = 0x7F;
 
 
     // -------------------------------------------------------------------------

@@ -1,100 +1,207 @@
-# ELRS-HID-Bridge Post-v1.0 Checkpoint 1
+# ELRS-HID-Bridge — Post-v1.0 Checkpoint 2 (Lua r18 Compatibility Revision)
 
 ## Intent
 
-Harden CRSF receive-path regression coverage before adding the first CRSF/EdgeTX configurable parameter.
+Prove one standard CRSF/EdgeTX configuration parameter end-to-end:
 
-This checkpoint intentionally changes **self-test coverage only**. It does not change production parser, decoder, HID, failsafe, LED, configuration, or CRSF device behavior.
+**LED Brightness — 0 to 100**
 
-## Baseline
+This revision preserves the CRSF `FLOAT` implementation from the original
+Checkpoint 2 but removes the literal `%` unit string because the uploaded
+ExpressLRS `elrs.lua` r18 script constructs a Lua `string.format()` pattern by
+concatenating the unit directly after the numeric conversion. A literal `%`
+therefore produces the observed script error:
 
-- Stable release: `v1.0.0`
-- Release commit: `f4403e2db7c2649e6560fafd45ad2d8cba3acacc`
-- Authoritative build environment: PlatformIO `pico`
+`bad argument #3 to 'format' (no value)`
+
+This is a Lua r18 compatibility workaround, not a CRSF protocol rollback.
+
+## Protocol behavior
+
+- `0x29` Device Info reports one normal parameter.
+- Parameter `0` is the standard `ROOT` folder.
+- Parameter `1` is `LED Brightness`.
+- `LED Brightness` remains CRSF `FLOAT` (`0x08`).
+- Range is `0` through `100`.
+- Decimal point is `0`.
+- Step size is `1`.
+- Unit string is intentionally empty.
+- Parameter reads use `0x2C`.
+- Parameter entries are returned in `0x2B`.
+- Accepted FLOAT writes are acknowledged with `0x2D`.
+- All entries fit in one CRSF frame, so only chunk `0` is required.
+
+## Why the unit is blank
+
+The uploaded Lua r18 script constructs FLOAT display formatting in the form:
+
+`"%." .. precision .. "f" .. unit`
+
+With `%` as the unit, the resulting format string is effectively:
+
+`%.0f%`
+
+The trailing `%` is interpreted as the beginning of another Lua formatting
+directive and causes the script exception.
+
+Leaving the unit empty retains the standards-based FLOAT parameter while
+avoiding the Lua r18 display bug. Expected presentation is approximately:
+
+`LED Brightness    10`
+
+rather than:
+
+`LED Brightness    10%`
+
+## Runtime behavior
+
+Default LED brightness is 10.
+
+The previous NeoPixel brightness was 24/255, approximately 9.4%, so the new
+default intentionally remains visually close to the v1.0.0 behavior.
+
+A valid EdgeTX write:
+
+1. is decoded from the standard four-byte CRSF FLOAT representation,
+2. is range checked,
+3. updates `BridgeConfiguration::ledBrightnessPercent`,
+4. is applied immediately to the QT Py NeoPixel,
+5. is acknowledged to EdgeTX.
+
+The value is **not persisted**. Rebooting restores the default of 10.
 
 ## Files changed
 
-- `src/crsf_self_test.cpp`
-- `src/crsf_self_test.h`
+- `src/bridge_configuration.h`
+- `src/bridge_configuration.cpp`
+- `src/status_led.h`
+- `src/status_led.cpp`
+- `src/crsf_protocol.h`
+- `src/crsf_device.h`
+- `src/crsf_device.cpp`
+- `src/crsf_dispatcher.h`
+- `src/crsf_dispatcher.cpp`
+- `src/crsf_decoder.h`
+- `src/crsf_decoder.cpp`
+- `src/bridge_identity.h`
+- `src/main.cpp`
 
-## Regression coverage added / strengthened
+## Files added
 
-1. Frozen CRSF `0x16` RC-channel golden frame with fixed expected values for all 16 channels.
-   - The primary positive fixture is no longer generated at runtime by the self-test.
-   - This reduces the risk that test-frame generation and production decoding share the same packing mistake.
+- `src/crsf_parameter_self_test.h`
+- `src/crsf_parameter_self_test.cpp`
 
-2. Frozen CRSF `0x14` Link Statistics frame.
-   - Exercises the real parser -> dispatcher -> LinkStatisticsDecoder path.
-   - Verifies all ten currently consumed Link Statistics fields, including signed SNR values.
+## Compatibility revision versus the first Checkpoint 2 ZIP
 
-3. Corrupt-CRC rejection using the frozen RC fixture.
+Only the FLOAT unit presentation is intentionally changed:
 
-4. Valid CRSF sync/address acceptance using the same frozen frame.
+- Previous unit: `%`
+- Revised unit: empty string
 
-5. Invalid sync-byte recovery.
-
-6. Good frame -> garbage -> good frame recovery.
-
-7. Bad-CRC frame -> good frame recovery.
-
-8. Repeated invalid-length resynchronization followed by a valid frame.
+The FLOAT type, numeric range, step, default, read/write behavior, and bridge
+runtime behavior remain unchanged.
 
 ## Intentionally unchanged
 
-- USB HID descriptor and mapping
-- Eight-axis HID behavior
-- Receiver timeout / failsafe behavior
-- Link-state precedence rules
-- CRSF frame parser implementation
-- CRSF dispatcher implementation
-- CRSF device discovery behavior
-- EdgeTX interaction
-- LED behavior
-- BOOT-button behavior
-- Persistent configuration
+- HID mapping
+- HID axis orientation
+- receiver timeout
+- failsafe policy
+- Link Statistics behavior
+- BOOT-button maintenance behavior
+- USB descriptors
+- persistent storage
+- board support
 - `pico_debug`
+- firmware semantic version
 
-## Build / validation
+## Build procedure
 
-Use the established VS Code / PlatformIO workflow.
+Use the normal VS Code / PlatformIO workflow.
 
-1. Overlay the ZIP contents into the repository root.
-2. Open the project in VS Code.
-3. Confirm there are no new entries in **Problems**.
-4. Build the normal `pico` environment.
-5. Flash the normal `pico` build to the QT Py RP2040.
-6. Confirm startup completes normally. A CRSF self-test failure should prevent the normal startup state, so normal operation is the first hardware indication that all added fixtures passed.
+1. Overlay this ZIP at the repository root.
+2. Build the normal `pico` environment.
+3. Check VS Code **Problems**.
+4. Do not use `pico_debug` for this checkpoint.
 
-## Hardware smoke regression
+## Hardware test procedure
 
-With the established RP2 / Ranger / EdgeTX setup:
+### Parameter discovery
 
-1. TX off at bridge startup: confirm expected disconnected/failsafe indication.
-2. Power TX and establish the ELRS link: confirm normal green operational state.
-3. Open Windows `joy.cpl`:
-   - verify Roll, Pitch, Throttle, and Yaw directions remain correct;
-   - verify auxiliary analog axes still respond;
-   - verify representative buttons still respond.
-4. Power the TX off:
-   - verify all eight analog HID controls neutralize;
-   - verify all buttons release;
-   - verify failsafe indication remains correct.
-5. Power the TX back on:
-   - verify normal control recovers without rebooting the bridge.
-6. Optional but recommended: launch Liftoff and confirm normal simulator control.
+1. Flash the normal `pico` build.
+2. Link the transmitter/receiver normally.
+3. Open the ExpressLRS script on EdgeTX.
+4. Open `Other Devices`.
+5. Open `ELRS-HID-Bridge`.
+6. Confirm the previous Lua syntax error no longer appears.
+7. Confirm `LED Brightness` appears with a value near 10.
 
-## Commit boundary
+### Parameter write
 
-If build and hardware regression pass, commit this checkpoint independently before beginning CRSF parameter work.
+Test these values:
 
-Suggested commit message:
+- 0
+- 10
+- 25
+- 50
+- 100
 
-`test: harden CRSF receive-path regression coverage`
+For each value:
+
+1. confirm EdgeTX accepts the change,
+2. confirm the physical LED changes immediately,
+3. confirm the CRSF device page remains responsive,
+4. confirm RC/HID behavior continues normally.
+
+At 0 the LED being dark is expected. HID must remain fully operational.
+
+### Volatile configuration
+
+1. Set a non-default value such as 50.
+2. Power-cycle the bridge.
+3. Confirm LED brightness returns to 10.
+
+### HID / failsafe regression
+
+1. Confirm all eight analog controls and existing buttons in `joy.cpl`.
+2. Turn the transmitter off.
+3. Confirm all eight analog controls neutralize and all buttons release.
+4. Turn the transmitter back on.
+5. Confirm automatic recovery.
+
+## Expected checkpoint result
+
+This checkpoint succeeds when:
+
+- opening `ELRS-HID-Bridge` no longer throws the Lua r18 formatting error,
+- `LED Brightness` is visible,
+- EdgeTX can change it from 0–100,
+- LED brightness changes immediately,
+- reboot restores 10,
+- HID behavior remains unchanged,
+- failsafe behavior remains unchanged,
+- startup self-tests pass.
+
+## Troubleshooting boundary
+
+If the Lua error disappears but the field is missing or cannot be edited, stop
+and capture the exact behavior before making more changes:
+
+- Does `ELRS-HID-Bridge` open normally?
+- Does `LED Brightness` appear?
+- What value is shown?
+- Can editing mode be entered?
+- Does changing the value affect the physical LED?
+- Does the displayed value refresh after editing?
+
+## Suggested commit
+
+If validation passes:
+
+`feat: add runtime CRSF LED brightness parameter`
 
 ## Next checkpoint
 
-Implement the first CRSF/EdgeTX parameter proof of concept:
-
-**LED brightness, represented as a standard CRSF FLOAT parameter from 0-100%.**
-
-Do not add persistence in that checkpoint. The first objective is to prove discovery, read, write, validation, runtime configuration update, and visible LED behavior while preserving the v1.0.0 HID/failsafe baseline.
+If hardware validation succeeds, do not immediately add persistence. First
+review the working parameter path and decide whether a small reusable parameter
+definition layer is justified before adding more settings.

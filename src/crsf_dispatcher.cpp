@@ -1,5 +1,4 @@
 #include "crsf_dispatcher.h"
-
 #include "crsf_protocol.h"
 
 
@@ -32,7 +31,6 @@ void CrsfDispatcher::dispatch(
                 newChannels = true;
             }
 
-
             break;
         }
 
@@ -57,6 +55,28 @@ void CrsfDispatcher::dispatch(
         case Crsf::FRAME_DEVICE_PING:
         {
             crsfDevice.handleDevicePing(
+                frame
+            );
+
+
+            break;
+        }
+
+
+        case Crsf::FRAME_PARAMETER_READ:
+        {
+            crsfDevice.handleParameterRead(
+                frame
+            );
+
+
+            break;
+        }
+
+
+        case Crsf::FRAME_PARAMETER_WRITE:
+        {
+            crsfDevice.handleParameterWrite(
                 frame
             );
 
@@ -139,4 +159,46 @@ CrsfDispatcher::getDevicePing() const
 void CrsfDispatcher::clearDevicePing()
 {
     crsfDevice.clearDevicePing();
+}
+
+
+bool CrsfDispatcher::hasParameterRead() const
+{
+    return
+        crsfDevice.hasParameterRead();
+}
+
+
+const CrsfParameterRead&
+CrsfDispatcher::getParameterRead() const
+{
+    return
+        crsfDevice.parameterRead();
+}
+
+
+void CrsfDispatcher::clearParameterRead()
+{
+    crsfDevice.clearParameterRead();
+}
+
+
+bool CrsfDispatcher::hasParameterWrite() const
+{
+    return
+        crsfDevice.hasParameterWrite();
+}
+
+
+const CrsfParameterWrite&
+CrsfDispatcher::getParameterWrite() const
+{
+    return
+        crsfDevice.parameterWrite();
+}
+
+
+void CrsfDispatcher::clearParameterWrite()
+{
+    crsfDevice.clearParameterWrite();
 }

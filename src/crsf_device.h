@@ -1,5 +1,4 @@
 #pragma once
-
 #include <stddef.h>
 #include <stdint.h>
 #include "crsf_frame.h"
@@ -30,23 +29,42 @@ struct CrsfDeviceIdentity
 
 
     // CRSF Device Info identifiers.
-    //
-    // Their final project values are intentionally supplied by the
-    // caller so this protocol checkpoint does not prematurely lock in
-    // production identity/address policy.
     uint32_t serialNumber = 0;
-
     uint32_t hardwareId = 0;
 
     uint32_t firmwareId = 0;
 
 
     // Number/version of CRSF parameters exposed by this device.
-    //
-    // The current proof-of-concept uses zero parameters.
     uint8_t parameterCount = 0;
 
     uint8_t parameterVersion = 0;
+};
+
+
+struct CrsfParameterRead
+{
+    uint8_t frameAddress = 0;
+    uint8_t destination = 0;
+    uint8_t origin = 0;
+
+    uint8_t parameterNumber = 0;
+    uint8_t chunkNumber = 0;
+};
+
+
+struct CrsfParameterWrite
+{
+    static constexpr uint8_t MAX_DATA_LENGTH = 8;
+
+    uint8_t frameAddress = 0;
+    uint8_t destination = 0;
+    uint8_t origin = 0;
+
+    uint8_t parameterNumber = 0;
+
+    uint8_t data[MAX_DATA_LENGTH] = {};
+    uint8_t dataLength = 0;
 };
 
 
@@ -56,53 +74,47 @@ public:
     void reset();
 
 
-    // Process a validated CRSF Device Ping frame.
-    //
-    // The current CrsfFrame abstraction exposes all bytes after
-    // Frame Type through payload.
-    //
-    // For an extended-header frame:
-    //
-    // payload[0] = Destination
-    // payload[1] = Origin
-    // payload[2...] = application payload / optional newer fields
-    //
-    // Device Ping has no defined application payload, but additional
-    // trailing bytes are intentionally tolerated.
     void handleDevicePing(
         const CrsfFrame& frame
     );
 
-
     bool hasDevicePing() const;
-
 
     const CrsfDevicePing&
     devicePing() const;
 
-
     void clearDevicePing();
+
+
+    // Capture validated CRSF Parameter Read (0x2C) and Parameter Write
+    // (0x2D) frames. Routing bytes are retained so application policy can
+    // decide whether a request is addressed to this bridge.
+    void handleParameterRead(
+        const CrsfFrame& frame
+    );
+
+    bool hasParameterRead() const;
+
+    const CrsfParameterRead&
+    parameterRead() const;
+
+    void clearParameterRead();
+
+
+    void handleParameterWrite(
+        const CrsfFrame& frame
+    );
+
+    bool hasParameterWrite() const;
+
+    const CrsfParameterWrite&
+    parameterWrite() const;
+
+    void clearParameterWrite();
 
 
     // Construct a CRSF Parameter Device Information (0x29) response
     // for a previously recognized Device Ping (0x28).
-    //
-    // This method only constructs the frame. It does not transmit it.
-    //
-    // A response is generated only when the ping is either:
-    //
-    // - broadcast, or
-    // - addressed directly to localAddress.
-    //
-    // The response is routed back to the ping origin and uses
-    // localAddress as the response Origin field.
-    //
-    // localAddress and identity are deliberately caller-supplied at
-    // this checkpoint. The live RP2/EdgeTX path still needs to validate
-    // the final device address and production identity values before
-    // they are committed as project policy.
-    //
-    // outputLength is set to zero on failure.
     bool buildDeviceInfoResponse(
         const CrsfDevicePing& ping,
         uint8_t localAddress,
@@ -113,6 +125,63 @@ public:
     ) const;
 
 
+    // Build parameter-entry responses for the small runtime parameter set.
+    //
+    // These methods encode protocol mechanics only. Parameter numbering and
+    // bridge-specific values remain caller-owned policy.
+    bool buildFolderParameterResponse(
+        const CrsfParameterRead& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        uint8_t parentFolder,
+        const char* name,
+        const uint8_t* children,
+        size_t childCount,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
+    bool buildFloatParameterResponse(
+        const CrsfParameterRead& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        uint8_t parentFolder,
+        const char* name,
+        int32_t value,
+        int32_t minimum,
+        int32_t maximum,
+        int32_t defaultValue,
+        uint8_t decimalPoint,
+        int32_t stepSize,
+        const char* unit,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
+    // A successful FLOAT write is confirmed with a 0x2D frame containing
+    // Parameter_number followed by the accepted 4-byte big-endian value.
+    bool buildFloatWriteResponse(
+        const CrsfParameterWrite& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        int32_t acceptedValue,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
+    static bool readInt32BigEndian(
+        const uint8_t* data,
+        size_t length,
+        int32_t& value
+    );
+
+
 private:
     static void writeUint32BigEndian(
         uint32_t value,
@@ -120,8 +189,21 @@ private:
     );
 
 
+    static bool requestIsForLocalDevice(
+        uint8_t destination,
+        uint8_t origin,
+        uint8_t localAddress
+    );
+
+
     bool devicePingAvailable = false;
-
-
     CrsfDevicePing latestDevicePing = {};
+
+
+    bool parameterReadAvailable = false;
+    CrsfParameterRead latestParameterRead = {};
+
+
+    bool parameterWriteAvailable = false;
+    CrsfParameterWrite latestParameterWrite = {};
 };

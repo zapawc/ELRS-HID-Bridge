@@ -7,19 +7,12 @@ namespace
 {
     constexpr size_t EXTENDED_FRAME_OVERHEAD = 6;
 
-
     constexpr size_t MAX_EXTENDED_PAYLOAD_SIZE =
         CrsfFrameEncoder::MAX_FRAME_SIZE -
         EXTENDED_FRAME_OVERHEAD;
 
 
-    // Device Info fields following the null-terminated name:
-    //
-    // Serial_number              4 bytes
-    // Hardware_ID                4 bytes
-    // Firmware_ID                4 bytes
-    // Parameters_total           1 byte
-    // Parameter_version_number   1 byte
+    // Device Info fields following the null-terminated name.
     constexpr size_t DEVICE_INFO_FIXED_FIELD_SIZE = 14;
 
 
@@ -27,6 +20,55 @@ namespace
         MAX_EXTENDED_PAYLOAD_SIZE -
         1 -
         DEVICE_INFO_FIXED_FIELD_SIZE;
+
+
+    bool appendString(
+        const char* value,
+        uint8_t* payload,
+        size_t payloadCapacity,
+        size_t& payloadIndex
+    )
+    {
+        if (
+            value == nullptr ||
+            payload == nullptr
+        )
+        {
+            return false;
+        }
+
+
+        size_t index = 0;
+
+        while (true)
+        {
+            if (
+                payloadIndex >=
+                payloadCapacity
+            )
+            {
+                return false;
+            }
+
+
+            const uint8_t byte =
+                static_cast<uint8_t>(
+                    value[index]
+                );
+
+            payload[payloadIndex++] =
+                byte;
+
+
+            if (byte == 0)
+            {
+                return true;
+            }
+
+
+            ++index;
+        }
+    }
 }
 
 
@@ -34,9 +76,20 @@ void CrsfDevice::reset()
 {
     devicePingAvailable = false;
 
-
     latestDevicePing =
         CrsfDevicePing{};
+
+
+    parameterReadAvailable = false;
+
+    latestParameterRead =
+        CrsfParameterRead{};
+
+
+    parameterWriteAvailable = false;
+
+    latestParameterWrite =
+        CrsfParameterWrite{};
 }
 
 
@@ -53,13 +106,6 @@ void CrsfDevice::handleDevicePing(
     }
 
 
-    // Extended-header frames require at least:
-    //
-    // Destination
-    // Origin
-    //
-    // The current CrsfFrame abstraction counts these routing bytes
-    // inside payloadLength.
     if (
         frame.payload == nullptr ||
         frame.payloadLength < 2
@@ -72,14 +118,11 @@ void CrsfDevice::handleDevicePing(
     latestDevicePing.frameAddress =
         frame.address;
 
-
     latestDevicePing.destination =
         frame.payload[0];
 
-
     latestDevicePing.origin =
         frame.payload[1];
-
 
     devicePingAvailable = true;
 }
@@ -106,6 +149,146 @@ void CrsfDevice::clearDevicePing()
 }
 
 
+void CrsfDevice::handleParameterRead(
+    const CrsfFrame& frame
+)
+{
+    if (
+        frame.type !=
+        Crsf::FRAME_PARAMETER_READ ||
+        frame.payload == nullptr ||
+        frame.payloadLength < 4
+    )
+    {
+        return;
+    }
+
+
+    latestParameterRead.frameAddress =
+        frame.address;
+
+    latestParameterRead.destination =
+        frame.payload[0];
+
+    latestParameterRead.origin =
+        frame.payload[1];
+
+    latestParameterRead.parameterNumber =
+        frame.payload[2];
+
+    latestParameterRead.chunkNumber =
+        frame.payload[3];
+
+    parameterReadAvailable = true;
+}
+
+
+bool CrsfDevice::hasParameterRead() const
+{
+    return
+        parameterReadAvailable;
+}
+
+
+const CrsfParameterRead&
+CrsfDevice::parameterRead() const
+{
+    return
+        latestParameterRead;
+}
+
+
+void CrsfDevice::clearParameterRead()
+{
+    parameterReadAvailable = false;
+}
+
+
+void CrsfDevice::handleParameterWrite(
+    const CrsfFrame& frame
+)
+{
+    if (
+        frame.type !=
+        Crsf::FRAME_PARAMETER_WRITE ||
+        frame.payload == nullptr ||
+        frame.payloadLength < 3
+    )
+    {
+        return;
+    }
+
+
+    const size_t dataLength =
+        frame.payloadLength - 3;
+
+
+    if (
+        dataLength >
+        CrsfParameterWrite::MAX_DATA_LENGTH
+    )
+    {
+        return;
+    }
+
+
+    latestParameterWrite =
+        CrsfParameterWrite{};
+
+    latestParameterWrite.frameAddress =
+        frame.address;
+
+    latestParameterWrite.destination =
+        frame.payload[0];
+
+    latestParameterWrite.origin =
+        frame.payload[1];
+
+    latestParameterWrite.parameterNumber =
+        frame.payload[2];
+
+    latestParameterWrite.dataLength =
+        static_cast<uint8_t>(
+            dataLength
+        );
+
+
+    for (
+        size_t index = 0;
+        index < dataLength;
+        ++index
+    )
+    {
+        latestParameterWrite.data[index] =
+            frame.payload[3 + index];
+    }
+
+
+    parameterWriteAvailable = true;
+}
+
+
+bool CrsfDevice::hasParameterWrite() const
+{
+    return
+        parameterWriteAvailable;
+}
+
+
+const CrsfParameterWrite&
+CrsfDevice::parameterWrite() const
+{
+    return
+        latestParameterWrite;
+}
+
+
+void CrsfDevice::clearParameterWrite()
+{
+    parameterWriteAvailable = false;
+}
+
+
 void CrsfDevice::writeUint32BigEndian(
     uint32_t value,
     uint8_t* output
@@ -116,23 +299,102 @@ void CrsfDevice::writeUint32BigEndian(
             (value >> 24) & 0xFF
         );
 
-
     output[1] =
         static_cast<uint8_t>(
             (value >> 16) & 0xFF
         );
-
 
     output[2] =
         static_cast<uint8_t>(
             (value >> 8) & 0xFF
         );
 
-
     output[3] =
         static_cast<uint8_t>(
             value & 0xFF
         );
+}
+
+
+bool CrsfDevice::readInt32BigEndian(
+    const uint8_t* data,
+    size_t length,
+    int32_t& value
+)
+{
+    if (
+        data == nullptr ||
+        length != 4
+    )
+    {
+        return false;
+    }
+
+
+    const uint32_t unsignedValue =
+        (
+            static_cast<uint32_t>(
+                data[0]
+            ) << 24
+        ) |
+        (
+            static_cast<uint32_t>(
+                data[1]
+            ) << 16
+        ) |
+        (
+            static_cast<uint32_t>(
+                data[2]
+            ) << 8
+        ) |
+        static_cast<uint32_t>(
+            data[3]
+        );
+
+
+    value =
+        static_cast<int32_t>(
+            unsignedValue
+        );
+
+
+    return true;
+}
+
+
+bool CrsfDevice::requestIsForLocalDevice(
+    uint8_t destination,
+    uint8_t origin,
+    uint8_t localAddress
+)
+{
+    if (
+        localAddress ==
+            Crsf::ADDRESS_BROADCAST ||
+        !Crsf::isValidSyncByte(
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    if (
+        origin ==
+            Crsf::ADDRESS_BROADCAST ||
+        !Crsf::isValidSyncByte(
+            origin
+        )
+    )
+    {
+        return false;
+    }
+
+
+    return
+        destination ==
+        localAddress;
 }
 
 
@@ -157,7 +419,6 @@ bool CrsfDevice::buildDeviceInfoResponse(
     }
 
 
-    // A device must have a concrete origin address.
     if (
         localAddress ==
             Crsf::ADDRESS_BROADCAST ||
@@ -170,8 +431,6 @@ bool CrsfDevice::buildDeviceInfoResponse(
     }
 
 
-    // The response destination is the ping origin, so the origin must
-    // also identify a concrete CRSF device.
     if (
         ping.origin ==
             Crsf::ADDRESS_BROADCAST ||
@@ -184,8 +443,6 @@ bool CrsfDevice::buildDeviceInfoResponse(
     }
 
 
-    // Device Ping can target every device or one specific device.
-    // Do not answer traffic addressed to some other CRSF node.
     if (
         ping.destination !=
             Crsf::ADDRESS_BROADCAST &&
@@ -197,9 +454,6 @@ bool CrsfDevice::buildDeviceInfoResponse(
     }
 
 
-    // Determine the name length while enforcing the CRSF maximum
-    // frame size. A valid Device Info payload must leave room for the
-    // terminating NUL and the fixed identity fields.
     size_t nameLength = 0;
 
 
@@ -242,7 +496,6 @@ bool CrsfDevice::buildDeviceInfoResponse(
     }
 
 
-    // CRSF Device Info requires a null-terminated device name.
     payload[payloadIndex++] = 0;
 
 
@@ -273,7 +526,6 @@ bool CrsfDevice::buildDeviceInfoResponse(
     payload[payloadIndex++] =
         identity.parameterCount;
 
-
     payload[payloadIndex++] =
         identity.parameterVersion;
 
@@ -289,6 +541,364 @@ bool CrsfDevice::buildDeviceInfoResponse(
             localAddress,
             payload,
             payloadIndex,
+            output,
+            outputCapacity,
+            outputLength
+        );
+}
+
+
+bool CrsfDevice::buildFolderParameterResponse(
+    const CrsfParameterRead& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    uint8_t parentFolder,
+    const char* name,
+    const uint8_t* children,
+    size_t childCount,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    outputLength = 0;
+
+
+    if (
+        request.parameterNumber !=
+            parameterNumber ||
+        request.chunkNumber != 0 ||
+        !requestIsForLocalDevice(
+            request.destination,
+            request.origin,
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    if (
+        childCount > 0 &&
+        children == nullptr
+    )
+    {
+        return false;
+    }
+
+
+    uint8_t payload[
+        MAX_EXTENDED_PAYLOAD_SIZE
+    ] = {};
+
+    size_t payloadIndex = 0;
+
+
+    payload[payloadIndex++] =
+        parameterNumber;
+
+    // Entire entry fits into one CRSF frame.
+    payload[payloadIndex++] = 0;
+
+    payload[payloadIndex++] =
+        parentFolder;
+
+    payload[payloadIndex++] =
+        Crsf::PARAMETER_TYPE_FOLDER;
+
+
+    if (
+        !appendString(
+            name,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    for (
+        size_t index = 0;
+        index < childCount;
+        ++index
+    )
+    {
+        if (
+            payloadIndex >=
+            sizeof(payload)
+        )
+        {
+            return false;
+        }
+
+
+        payload[payloadIndex++] =
+            children[index];
+    }
+
+
+    if (
+        payloadIndex >=
+        sizeof(payload)
+    )
+    {
+        return false;
+    }
+
+
+    // Folder child lists are terminated by 0xFF.
+    payload[payloadIndex++] =
+        0xFF;
+
+
+    CrsfFrameEncoder encoder;
+
+
+    return
+        encoder.encodeExtended(
+            Crsf::SYNC_BYTE,
+            Crsf::FRAME_PARAMETER_SETTINGS_ENTRY,
+            request.origin,
+            localAddress,
+            payload,
+            payloadIndex,
+            output,
+            outputCapacity,
+            outputLength
+        );
+}
+
+
+bool CrsfDevice::buildFloatParameterResponse(
+    const CrsfParameterRead& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    uint8_t parentFolder,
+    const char* name,
+    int32_t value,
+    int32_t minimum,
+    int32_t maximum,
+    int32_t defaultValue,
+    uint8_t decimalPoint,
+    int32_t stepSize,
+    const char* unit,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    outputLength = 0;
+
+
+    if (
+        request.parameterNumber !=
+            parameterNumber ||
+        request.chunkNumber != 0 ||
+        !requestIsForLocalDevice(
+            request.destination,
+            request.origin,
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    if (
+        value < minimum ||
+        value > maximum ||
+        defaultValue < minimum ||
+        defaultValue > maximum ||
+        stepSize <= 0
+    )
+    {
+        return false;
+    }
+
+
+    uint8_t payload[
+        MAX_EXTENDED_PAYLOAD_SIZE
+    ] = {};
+
+    size_t payloadIndex = 0;
+
+
+    payload[payloadIndex++] =
+        parameterNumber;
+
+    payload[payloadIndex++] = 0;
+
+    payload[payloadIndex++] =
+        parentFolder;
+
+    payload[payloadIndex++] =
+        Crsf::PARAMETER_TYPE_FLOAT;
+
+
+    if (
+        !appendString(
+            name,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    constexpr size_t numericBytes =
+        4 + 4 + 4 + 4 + 1 + 4;
+
+
+    if (
+        payloadIndex +
+        numericBytes >
+        sizeof(payload)
+    )
+    {
+        return false;
+    }
+
+
+    writeUint32BigEndian(
+        static_cast<uint32_t>(
+            value
+        ),
+        &payload[payloadIndex]
+    );
+    payloadIndex += 4;
+
+
+    writeUint32BigEndian(
+        static_cast<uint32_t>(
+            minimum
+        ),
+        &payload[payloadIndex]
+    );
+    payloadIndex += 4;
+
+
+    writeUint32BigEndian(
+        static_cast<uint32_t>(
+            maximum
+        ),
+        &payload[payloadIndex]
+    );
+    payloadIndex += 4;
+
+
+    writeUint32BigEndian(
+        static_cast<uint32_t>(
+            defaultValue
+        ),
+        &payload[payloadIndex]
+    );
+    payloadIndex += 4;
+
+
+    payload[payloadIndex++] =
+        decimalPoint;
+
+
+    writeUint32BigEndian(
+        static_cast<uint32_t>(
+            stepSize
+        ),
+        &payload[payloadIndex]
+    );
+    payloadIndex += 4;
+
+
+    if (
+        !appendString(
+            unit,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    CrsfFrameEncoder encoder;
+
+
+    return
+        encoder.encodeExtended(
+            Crsf::SYNC_BYTE,
+            Crsf::FRAME_PARAMETER_SETTINGS_ENTRY,
+            request.origin,
+            localAddress,
+            payload,
+            payloadIndex,
+            output,
+            outputCapacity,
+            outputLength
+        );
+}
+
+
+bool CrsfDevice::buildFloatWriteResponse(
+    const CrsfParameterWrite& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    int32_t acceptedValue,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    outputLength = 0;
+
+
+    if (
+        request.parameterNumber !=
+            parameterNumber ||
+        !requestIsForLocalDevice(
+            request.destination,
+            request.origin,
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    uint8_t payload[5] = {};
+
+    payload[0] =
+        parameterNumber;
+
+
+    writeUint32BigEndian(
+        static_cast<uint32_t>(
+            acceptedValue
+        ),
+        &payload[1]
+    );
+
+
+    CrsfFrameEncoder encoder;
+
+
+    return
+        encoder.encodeExtended(
+            Crsf::SYNC_BYTE,
+            Crsf::FRAME_PARAMETER_WRITE,
+            request.origin,
+            localAddress,
+            payload,
+            sizeof(payload),
             output,
             outputCapacity,
             outputLength

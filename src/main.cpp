@@ -11,6 +11,7 @@
 #include "crsf_device_self_test.h"
 #include "crsf_frame_encoder.h"
 #include "crsf_frame_encoder_self_test.h"
+#include "crsf_parameter_self_test.h"
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
 #include "failsafe_policy.h"
@@ -22,6 +23,28 @@
 #include "status_display.h"
 #include "status_led.h"
 #include "usb_hid.h"
+
+
+namespace
+{
+    constexpr uint8_t PARAMETER_ROOT = 0;
+    constexpr uint8_t PARAMETER_LED_BRIGHTNESS = 1;
+
+    constexpr int32_t LED_BRIGHTNESS_MIN = 0;
+    constexpr int32_t LED_BRIGHTNESS_MAX = 100;
+    constexpr int32_t LED_BRIGHTNESS_DEFAULT = 10;
+    constexpr int32_t LED_BRIGHTNESS_STEP = 1;
+
+
+    bool requestIsForBridge(
+        uint8_t destination
+    )
+    {
+        return
+            destination ==
+            BridgeIdentity::CRSF_DEVICE_ADDRESS;
+    }
+}
 
 
 RawChannels rawChannels;
@@ -80,7 +103,10 @@ bool startupSelfTestsPassed = false;
 
 void setup()
 {
-    statusLed.begin();
+    statusLed.begin(
+        bridgeConfiguration
+            .ledBrightnessPercent
+    );
 
 
     statusDisplay.reset();
@@ -107,15 +133,18 @@ void setup()
     // - outbound extended-frame construction
     // - Device Ping recognition
     // - Device Info response construction
+    // - CRSF parameter read/write encoding
     // - complete failsafe output policy
     // - canonical firmware version / CRSF Firmware ID consistency
     //
     // None of these startup tests transmit on the live CRSF UART.
     // -------------------------------------------------------------------------
+
     startupSelfTestsPassed =
         CrsfSelfTest::run() &&
         CrsfFrameEncoderSelfTest::run() &&
         CrsfDeviceSelfTest::run() &&
+        CrsfParameterSelfTest::run() &&
         FailsafePolicySelfTest::run() &&
         FirmwareVersionSelfTest::run();
 
@@ -151,6 +180,7 @@ void setup()
         channelState
     );
 
+
     statusDisplay.update(
         millis(),
         bridgeState
@@ -163,7 +193,6 @@ void loop()
     if (!startupSelfTestsPassed)
     {
         delay(10);
-
         return;
     }
 
@@ -175,6 +204,7 @@ void loop()
     const BootButtonState buttonState =
         bootButton.update();
 
+
     const MaintenanceUpdate maintenanceUpdate =
         maintenanceController.update(
             buttonState
@@ -184,6 +214,7 @@ void loop()
     // -------------------------------------------------------------------------
     // Maintenance selection display
     // -------------------------------------------------------------------------
+
     if (
         maintenanceUpdate.selectionChanged
     )
@@ -198,7 +229,6 @@ void loop()
 
                 break;
             }
-
 
             case MaintenanceSelection::Wifi:
             {
@@ -225,9 +255,11 @@ void loop()
         }
     }
 
+
     // -------------------------------------------------------------------------
     // Maintenance action on release
     // -------------------------------------------------------------------------
+
     switch (
         maintenanceUpdate.action
     )
@@ -283,6 +315,7 @@ void loop()
         }
     }
 
+
     // -------------------------------------------------------------------------
     // Receive CRSF bytes
     // -------------------------------------------------------------------------
@@ -300,6 +333,7 @@ void loop()
             crsfByte
         );
     }
+
 
     if (
         !bridgeState.hasReceiverBytes() &&
@@ -321,6 +355,7 @@ void loop()
         rawChannels =
             crsfDecoder.getChannels();
 
+
         channelNormalizer.update(
             rawChannels,
             normalizedChannels
@@ -341,6 +376,7 @@ void loop()
         crsfDecoder.clearNewChannels();
     }
 
+
     // -------------------------------------------------------------------------
     // Process Link Statistics
     // -------------------------------------------------------------------------
@@ -357,18 +393,9 @@ void loop()
         crsfDecoder.clearNewLinkStatistics();
     }
 
+
     // -------------------------------------------------------------------------
     // Device Ping -> Device Info
-    //
-    // This is the first live bidirectional CRSF proof-of-concept.
-    //
-    // CrsfDevice::buildDeviceInfoResponse() remains the single source of
-    // routing/filtering/encoding policy. It only creates a response when the
-    // ping is broadcast or is directly addressed to our experimental local
-    // CRSF node address.
-    //
-    // The experimental address/identity live in bridge_identity.h so this
-    // hardware test does not bury temporary protocol policy in main.cpp.
     // -------------------------------------------------------------------------
 
     if (
@@ -411,10 +438,201 @@ void loop()
         }
 
 
-        // One incoming ping can produce at most one response attempt.
-        // Clear it whether it was addressed to us or intentionally ignored.
         crsfDecoder.clearDevicePing();
     }
+
+
+    // -------------------------------------------------------------------------
+    // CRSF parameter reads
+    //
+    // Parameter 0 = standardized ROOT folder
+    // Parameter 1 = LED Brightness, FLOAT 0-100%
+    //
+    // All entries fit in one CRSF frame, so only chunk 0 is supported.
+    // -------------------------------------------------------------------------
+
+    if (
+        crsfDecoder.hasParameterRead()
+    )
+    {
+        const CrsfParameterRead request =
+            crsfDecoder.getParameterRead();
+
+
+        uint8_t response[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t responseLength = 0;
+
+
+        CrsfDevice responseBuilder;
+
+
+        if (
+            request.parameterNumber ==
+                PARAMETER_ROOT
+        )
+        {
+            constexpr uint8_t children[] =
+            {
+                PARAMETER_LED_BRIGHTNESS
+            };
+
+
+            if (
+                responseBuilder
+                    .buildFolderParameterResponse(
+                        request,
+                        BridgeIdentity::CRSF_DEVICE_ADDRESS,
+                        PARAMETER_ROOT,
+                        PARAMETER_ROOT,
+                        "ROOT",
+                        children,
+                        sizeof(children),
+                        response,
+                        sizeof(response),
+                        responseLength
+                    )
+            )
+            {
+                crsfUart.write(
+                    response,
+                    responseLength
+                );
+            }
+        }
+        else if (
+            request.parameterNumber ==
+                PARAMETER_LED_BRIGHTNESS
+        )
+        {
+            if (
+                responseBuilder
+                    .buildFloatParameterResponse(
+                        request,
+                        BridgeIdentity::CRSF_DEVICE_ADDRESS,
+                        PARAMETER_LED_BRIGHTNESS,
+                        PARAMETER_ROOT,
+                        "LED Brightness",
+                        bridgeConfiguration
+                            .ledBrightnessPercent,
+                        LED_BRIGHTNESS_MIN,
+                        LED_BRIGHTNESS_MAX,
+                        LED_BRIGHTNESS_DEFAULT,
+                        0,
+                        LED_BRIGHTNESS_STEP,
+                        "",
+                        response,
+                        sizeof(response),
+                        responseLength
+                    )
+            )
+            {
+                crsfUart.write(
+                    response,
+                    responseLength
+                );
+            }
+        }
+
+
+        crsfDecoder.clearParameterRead();
+    }
+
+
+    // -------------------------------------------------------------------------
+    // CRSF parameter writes
+    //
+    // Runtime-only checkpoint:
+    //
+    // - accept only parameter 1
+    // - require a standard four-byte FLOAT value
+    // - validate 0-100
+    // - apply immediately
+    // - acknowledge with 0x2D
+    // - do not persist across reboot
+    // -------------------------------------------------------------------------
+
+    if (
+        crsfDecoder.hasParameterWrite()
+    )
+    {
+        const CrsfParameterWrite request =
+            crsfDecoder.getParameterWrite();
+
+
+        if (
+            request.parameterNumber ==
+                PARAMETER_LED_BRIGHTNESS &&
+            requestIsForBridge(
+                request.destination
+            )
+        )
+        {
+            int32_t brightness = 0;
+
+
+            if (
+                CrsfDevice::readInt32BigEndian(
+                    request.data,
+                    request.dataLength,
+                    brightness
+                ) &&
+                brightness >=
+                    LED_BRIGHTNESS_MIN &&
+                brightness <=
+                    LED_BRIGHTNESS_MAX
+            )
+            {
+                bridgeConfiguration
+                    .ledBrightnessPercent =
+                    static_cast<uint8_t>(
+                        brightness
+                    );
+
+
+                statusLed.setBrightnessPercent(
+                    bridgeConfiguration
+                        .ledBrightnessPercent
+                );
+
+
+                uint8_t response[
+                    CrsfFrameEncoder::MAX_FRAME_SIZE
+                ] = {};
+
+                size_t responseLength = 0;
+
+
+                CrsfDevice responseBuilder;
+
+
+                if (
+                    responseBuilder
+                        .buildFloatWriteResponse(
+                            request,
+                            BridgeIdentity::CRSF_DEVICE_ADDRESS,
+                            PARAMETER_LED_BRIGHTNESS,
+                            brightness,
+                            response,
+                            sizeof(response),
+                            responseLength
+                        )
+                )
+                {
+                    crsfUart.write(
+                        response,
+                        responseLength
+                    );
+                }
+            }
+        }
+
+
+        crsfDecoder.clearParameterWrite();
+    }
+
 
     // -------------------------------------------------------------------------
     // Receiver timeout / failsafe
@@ -431,6 +649,7 @@ void loop()
             channelState
         );
     }
+
 
     // -------------------------------------------------------------------------
     // Status display arbitration
@@ -449,6 +668,7 @@ void loop()
     usbHid.update(
         channelState
     );
+
 
     delay(1);
 }

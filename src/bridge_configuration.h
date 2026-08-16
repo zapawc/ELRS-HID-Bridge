@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-
 #include "channel_index.h"
 
 
@@ -40,7 +39,6 @@ public:
     // These defaults intentionally reproduce the currently
     // validated EdgeTX -> CRSF -> USB HID mapping.
     static BridgeConfiguration defaults();
-
 
     // -------------------------------------------------------------------------
     // Primary controls
@@ -94,4 +92,14 @@ public:
     // -------------------------------------------------------------------------
 
     uint32_t receiverTimeoutMs = 500;
+
+
+    // -------------------------------------------------------------------------
+    // Local status display
+    //
+    // Runtime-only in the first CRSF-parameter checkpoint.
+    // Persistence is intentionally deferred.
+    // -------------------------------------------------------------------------
+
+    uint8_t ledBrightnessPercent = 10;
 };

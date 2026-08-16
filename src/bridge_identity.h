@@ -1,5 +1,4 @@
 #pragma once
-
 #include <stdint.h>
 #include "crsf_device.h"
 #include "crsf_protocol.h"
@@ -19,7 +18,6 @@ namespace BridgeIdentity
     // RP2 -> ELRS RF -> Ranger -> EdgeTX
     //
     // EdgeTX discovers ELRS-HID-Bridge under Other Devices with this address.
-    // The reference implementation therefore retains 0xC8 for v1.0 hardening.
     // -------------------------------------------------------------------------
 
     constexpr uint8_t CRSF_DEVICE_ADDRESS =
@@ -32,16 +30,8 @@ namespace BridgeIdentity
 
     // Project-defined deterministic identifiers.
     //
-    // CRSF Device Info specifies 32-bit Serial Number and Hardware ID fields but
-    // does not define a public assignment registry for this project. The
-    // reference implementation uses readable, stable FourCC-style identifiers:
-    //
-    // 0x45484231 = ASCII "EHB1" -> ELRS-HID-Bridge reference identity
-    // 0x51545059 = ASCII "QTPY" -> QT Py RP2040 reference hardware
-    //
-    // CRSF_SERIAL_NUMBER is a project-family identifier, not a per-unit unique
-    // hardware serial number.
-
+    // 0x45484231 = ASCII "EHB1"
+    // 0x51545059 = ASCII "QTPY"
     constexpr uint32_t CRSF_SERIAL_NUMBER =
         0x45484231u;
 
@@ -49,14 +39,20 @@ namespace BridgeIdentity
         0x51545059u;
 
 
-    // Firmware ID is derived from the canonical semantic version source.
     constexpr uint32_t CRSF_FIRMWARE_ID =
         FirmwareVersion::CRSF_ID;
 
 
-    // Identity-only discovery exposes no CRSF parameters in the v1.0 cycle.
-    constexpr uint8_t CRSF_PARAMETER_COUNT = 0;
-    constexpr uint8_t CRSF_PARAMETER_VERSION = 0;
+    // Parameter 0 is the standardized root folder. Parameter count reports
+    // the normal numbered settings exposed after that root entry.
+    //
+    // Current set:
+    //
+    // 0 = ROOT folder
+    // 1 = LED Brightness
+    constexpr uint8_t CRSF_PARAMETER_COUNT = 1;
+
+    constexpr uint8_t CRSF_PARAMETER_VERSION = 1;
 
 
     inline CrsfDeviceIdentity crsfDeviceIdentity()
@@ -80,7 +76,6 @@ namespace BridgeIdentity
 
         identity.parameterVersion =
             CRSF_PARAMETER_VERSION;
-
 
         return identity;
     }

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "crsf_device.h"
 #include "crsf_frame.h"
 #include "link_statistics.h"
@@ -66,9 +65,28 @@ public:
     void clearDevicePing();
 
 
+    bool hasParameterRead() const;
+
+
+    const CrsfParameterRead&
+    getParameterRead() const;
+
+
+    void clearParameterRead();
+
+
+    bool hasParameterWrite() const;
+
+
+    const CrsfParameterWrite&
+    getParameterWrite() const;
+
+
+    void clearParameterWrite();
+
+
 private:
     bool newChannels = false;
-
     bool newLinkStatistics = false;
 
 

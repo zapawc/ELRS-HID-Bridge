@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
-
 #include "status_led.h"
 
 
@@ -11,8 +10,6 @@ namespace
 
     constexpr uint8_t PIXEL_COUNT = 1;
 
-    constexpr uint8_t LED_BRIGHTNESS = 24;
-
 
     Adafruit_NeoPixel pixel(
         PIXEL_COUNT,
@@ -22,7 +19,33 @@ namespace
 }
 
 
-void StatusLed::begin()
+uint8_t StatusLed::percentToNeoPixelBrightness(
+    uint8_t brightnessPercent
+)
+{
+    if (brightnessPercent > 100)
+    {
+        brightnessPercent = 100;
+    }
+
+
+    return
+        static_cast<uint8_t>(
+            (
+                static_cast<uint16_t>(
+                    brightnessPercent
+                ) *
+                255u +
+                50u
+            ) /
+            100u
+        );
+}
+
+
+void StatusLed::begin(
+    uint8_t brightnessPercent
+)
 {
     pinMode(
         NEOPIXEL_POWER_PIN,
@@ -38,12 +61,13 @@ void StatusLed::begin()
 
     delay(1);
 
-
     pixel.begin();
 
 
     pixel.setBrightness(
-        LED_BRIGHTNESS
+        percentToNeoPixelBrightness(
+            brightnessPercent
+        )
     );
 
 
@@ -54,6 +78,24 @@ void StatusLed::begin()
     setStatus(
         SystemStatus::Startup
     );
+}
+
+
+void StatusLed::setBrightnessPercent(
+    uint8_t brightnessPercent
+)
+{
+    pixel.setBrightness(
+        percentToNeoPixelBrightness(
+            brightnessPercent
+        )
+    );
+
+
+    // Re-apply the unscaled logical color after every brightness change.
+    // This avoids cumulative NeoPixel buffer rescaling and makes 0% -> nonzero
+    // transitions deterministic.
+    applyCurrentColor();
 }
 
 
@@ -74,7 +116,6 @@ void StatusLed::setStatus(
 
             break;
         }
-
 
         case SystemStatus::Ready:
         {
@@ -244,21 +285,32 @@ void StatusLed::showMaintenanceCancel()
 }
 
 
+void StatusLed::applyCurrentColor()
+{
+    pixel.setPixelColor(
+        0,
+        pixel.Color(
+            currentRed,
+            currentGreen,
+            currentBlue
+        )
+    );
+
+
+    pixel.show();
+}
+
+
 void StatusLed::setColor(
     unsigned char red,
     unsigned char green,
     unsigned char blue
 )
 {
-    pixel.setPixelColor(
-        0,
-        pixel.Color(
-            red,
-            green,
-            blue
-        )
-    );
+    currentRed = red;
+    currentGreen = green;
+    currentBlue = blue;
 
 
-    pixel.show();
+    applyCurrentColor();
 }
