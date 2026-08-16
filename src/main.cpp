@@ -1,13 +1,13 @@
 #include <Arduino.h>
 
 #include "boot_button.h"
+#include "bridge_state.h"
 #include "channel_mapper.h"
 #include "channel_normalizer.h"
 #include "channel_state.h"
 #include "crsf_decoder.h"
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
-#include "link_statistics.h"
 #include "normalized_channels.h"
 #include "raw_channels.h"
 #include "status_led.h"
@@ -27,17 +27,12 @@ BootButton bootButton;
 CrsfUart crsfUart;
 CrsfDecoder crsfDecoder;
 
+BridgeState bridgeState;
+
 bool crsfSelfTestPassed = false;
-
-bool receiverBytesSeen = false;
-bool receiverFramesSeen = false;
-bool receiverLost = false;
-
-bool linkStatisticsSeen = false;
 
 bool diagnosticDisplayActive = false;
 
-uint32_t lastValidRcFrameMs = 0;
 uint32_t diagnosticDisplayStartMs = 0;
 
 
@@ -70,12 +65,10 @@ namespace
 
     void restoreNormalLedState(
         StatusLed& led,
-        bool receiverFramesSeen,
-        bool receiverLost,
-        bool receiverBytesSeen
+        const BridgeState& state
     )
     {
-        if (receiverLost)
+        if (state.isReceiverLost())
         {
             led.setStatus(
                 SystemStatus::ReceiverLost
@@ -85,7 +78,7 @@ namespace
         }
 
 
-        if (receiverFramesSeen)
+        if (state.hasRcFrames())
         {
             led.setStatus(
                 SystemStatus::ReceiverFrames
@@ -95,7 +88,7 @@ namespace
         }
 
 
-        if (receiverBytesSeen)
+        if (state.hasReceiverBytes())
         {
             led.setStatus(
                 SystemStatus::ReceiverBytes
@@ -116,6 +109,8 @@ void setup()
 {
     statusLed.begin();
     bootButton.begin();
+
+    bridgeState.reset();
 
     usbHid.begin();
 
@@ -199,16 +194,14 @@ void loop()
         // already been declared lost.
 
         if (
-            linkStatisticsSeen &&
-            !receiverLost
+            bridgeState.hasLinkStatistics() &&
+            !bridgeState.isReceiverLost()
         )
         {
-            const LinkStatistics& statistics =
-                crsfDecoder.getLinkStatistics();
-
-
             statusLed.showLinkQuality(
-                statistics.uplinkLinkQuality
+                bridgeState
+                    .linkStatistics()
+                    .uplinkLinkQuality
             );
         }
         else
@@ -242,12 +235,11 @@ void loop()
 
 
     if (
-        !receiverBytesSeen &&
+        !bridgeState.hasReceiverBytes() &&
         crsfUart.hasReceivedData()
     )
     {
-        receiverBytesSeen =
-            true;
+        bridgeState.noteUartActivity();
 
 
         if (!diagnosticDisplayActive)
@@ -281,16 +273,9 @@ void loop()
         );
 
 
-        lastValidRcFrameMs =
-            millis();
-
-
-        receiverFramesSeen =
-            true;
-
-
-        receiverLost =
-            false;
+        bridgeState.noteRcFrame(
+            millis()
+        );
 
 
         if (!diagnosticDisplayActive)
@@ -313,8 +298,9 @@ void loop()
         crsfDecoder.hasNewLinkStatistics()
     )
     {
-        linkStatisticsSeen =
-            true;
+        bridgeState.noteLinkStatistics(
+            crsfDecoder.getLinkStatistics()
+        );
 
 
         crsfDecoder.clearNewLinkStatistics();
@@ -325,38 +311,28 @@ void loop()
     // Receiver timeout / failsafe
     // -------------------------------------------------------------------------
 
-    if (receiverFramesSeen)
-    {
-        const uint32_t now =
-            millis();
-
-
-        if (
-            !receiverLost &&
-            (now - lastValidRcFrameMs) >=
-                RECEIVER_TIMEOUT_MS
+    if (
+        bridgeState.updateRcTimeout(
+            millis(),
+            RECEIVER_TIMEOUT_MS
         )
-        {
-            receiverLost =
-                true;
+    )
+    {
+        setFailsafeState(
+            channelState
+        );
 
 
-            setFailsafeState(
-                channelState
-            );
+        // Receiver loss has higher priority than a
+        // temporary diagnostic display.
+
+        diagnosticDisplayActive =
+            false;
 
 
-            // Receiver loss has higher priority than a
-            // temporary diagnostic display.
-
-            diagnosticDisplayActive =
-                false;
-
-
-            statusLed.setStatus(
-                SystemStatus::ReceiverLost
-            );
-        }
+        statusLed.setStatus(
+            SystemStatus::ReceiverLost
+        );
     }
 
 
@@ -381,9 +357,7 @@ void loop()
 
             restoreNormalLedState(
                 statusLed,
-                receiverFramesSeen,
-                receiverLost,
-                receiverBytesSeen
+                bridgeState
             );
         }
     }
