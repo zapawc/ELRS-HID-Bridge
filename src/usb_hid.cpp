@@ -3,10 +3,6 @@
 
 #include "usb_hid.h"
 
-// -----------------------------------------------------------------------------
-// HID report descriptor
-// -----------------------------------------------------------------------------
-
 namespace
 {
     uint8_t const descHidReport[] =
@@ -20,85 +16,93 @@ namespace
         // Collection (Application)
         0xA1, 0x01,
 
-            // X and Y axes
-            0x09, 0x30,
-            0x09, 0x31,
+            // -----------------------------------------------------------------
+            // X and Y
+            // -----------------------------------------------------------------
 
-            // Logical Minimum (0)
-            0x15, 0x00,
+            0x09, 0x30,       // X
+            0x09, 0x31,       // Y
 
-            // Logical Maximum (65535)
-            0x27, 0xFF, 0xFF, 0x00, 0x00,
+            0x15, 0x00,       // Logical Minimum 0
+            0x27, 0xFF, 0xFF, 0x00, 0x00, // Logical Maximum 65535
 
-            // Report Size (16 bits)
+            0x75, 0x10,       // Report Size 16
+            0x95, 0x02,       // Report Count 2
+            0x81, 0x02,       // Input
+
+
+            // -----------------------------------------------------------------
+            // Slider 1 and Slider 2
+            // -----------------------------------------------------------------
+
+            0x09, 0x36,       // Slider
+            0x09, 0x36,       // Slider
+
             0x75, 0x10,
-
-            // Report Count (2)
             0x95, 0x02,
-
-            // Input (Data, Variable, Absolute)
             0x81, 0x02,
 
-            // Two sliders
-            0x09, 0x36,
-            0x09, 0x36,
 
-            // Report Size (16 bits)
+            // -----------------------------------------------------------------
+            // Z, Rx, Ry, Rz
+            // -----------------------------------------------------------------
+
+            0x09, 0x32,       // Z
+            0x09, 0x33,       // Rx
+            0x09, 0x34,       // Ry
+            0x09, 0x35,       // Rz
+
             0x75, 0x10,
-
-            // Report Count (2)
-            0x95, 0x02,
-
-            // Input (Data, Variable, Absolute)
+            0x95, 0x04,
             0x81, 0x02,
 
-            // Button page
-            0x05, 0x09,
 
-            // Buttons 1-32
-            0x19, 0x01,
-            0x29, 0x20,
+            // -----------------------------------------------------------------
+            // 32 buttons
+            // -----------------------------------------------------------------
 
-            // Logical Minimum (0)
-            0x15, 0x00,
+            0x05, 0x09,       // Usage Page (Button)
 
-            // Logical Maximum (1)
-            0x25, 0x01,
+            0x19, 0x01,       // Usage Minimum 1
+            0x29, 0x20,       // Usage Maximum 32
 
-            // Report Size (1 bit)
-            0x75, 0x01,
+            0x15, 0x00,       // Logical Minimum 0
+            0x25, 0x01,       // Logical Maximum 1
 
-            // Report Count (32)
-            0x95, 0x20,
+            0x75, 0x01,       // Report Size 1 bit
+            0x95, 0x20,       // Report Count 32
+            0x81, 0x02,       // Input
 
-            // Input (Data, Variable, Absolute)
-            0x81, 0x02,
-
-        // End Collection
         0xC0
     };
+
 
     struct __attribute__((packed)) HidReport
     {
         uint16_t x;
         uint16_t y;
+
         uint16_t slider1;
         uint16_t slider2;
+
+        uint16_t z;
+        uint16_t rx;
+        uint16_t ry;
+        uint16_t rz;
+
         uint32_t buttons;
     };
 
+
     static_assert(
-        sizeof(HidReport) == 12,
-        "HidReport must be exactly 12 bytes"
+        sizeof(HidReport) == 20,
+        "HidReport must be exactly 20 bytes"
     );
+
 
     Adafruit_USBD_HID usbHid;
 }
 
-
-// -----------------------------------------------------------------------------
-// UsbHid::begin
-// -----------------------------------------------------------------------------
 
 void UsbHid::begin()
 {
@@ -114,7 +118,9 @@ void UsbHid::begin()
         sizeof(descHidReport)
     );
 
-    usbHid.setStringDescriptor("ELRS HID Bridge");
+    usbHid.setStringDescriptor(
+        "ELRS HID Bridge"
+    );
 
     usbHid.begin();
 
@@ -127,11 +133,9 @@ void UsbHid::begin()
 }
 
 
-// -----------------------------------------------------------------------------
-// UsbHid::update
-// -----------------------------------------------------------------------------
-
-void UsbHid::update(const ChannelState& state)
+void UsbHid::update(
+    const ChannelState& state
+)
 {
 #ifdef TINYUSB_NEED_POLLING_TASK
     TinyUSBDevice.task();
@@ -149,11 +153,32 @@ void UsbHid::update(const ChannelState& state)
 
     HidReport report;
 
-    report.x = state.roll;
-    report.y = state.pitch;
-    report.slider1 = state.throttle;
-    report.slider2 = state.yaw;
-    report.buttons = state.buttons;
+    report.x =
+        state.roll;
+
+    report.y =
+        state.pitch;
+
+    report.slider1 =
+        state.throttle;
+
+    report.slider2 =
+        state.yaw;
+
+    report.z =
+        state.auxAnalog1;
+
+    report.rx =
+        state.auxAnalog2;
+
+    report.ry =
+        state.auxAnalog3;
+
+    report.rz =
+        state.auxAnalog4;
+
+    report.buttons =
+        state.buttons;
 
     usbHid.sendReport(
         0,

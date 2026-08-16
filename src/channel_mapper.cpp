@@ -84,18 +84,15 @@ void ChannelMapper::update(
 
 
     // -------------------------------------------------------------------------
-    // AUX controls
+    // AUX switch controls
     // -------------------------------------------------------------------------
 
     state.buttons = 0;
 
 
-    // -------------------------------------------------------------------------
     // SF / CH5
-    //
     // Up   -> released
     // Down -> Button 1
-    // -------------------------------------------------------------------------
 
     if (
         decodeTwoPosition(
@@ -107,13 +104,10 @@ void ChannelMapper::update(
     }
 
 
-    // -------------------------------------------------------------------------
     // SA / CH6
-    //
     // Up     -> no button
     // Middle -> Button 2
     // Down   -> Button 3
-    // -------------------------------------------------------------------------
 
     switch (
         decodeThreePosition(
@@ -134,13 +128,10 @@ void ChannelMapper::update(
     }
 
 
-    // -------------------------------------------------------------------------
     // SB / CH7
-    //
     // Up     -> no button
     // Middle -> Button 4
     // Down   -> Button 5
-    // -------------------------------------------------------------------------
 
     switch (
         decodeThreePosition(
@@ -161,13 +152,10 @@ void ChannelMapper::update(
     }
 
 
-    // -------------------------------------------------------------------------
     // SC / CH8
-    //
     // Up     -> no button
     // Middle -> Button 6
     // Down   -> Button 7
-    // -------------------------------------------------------------------------
 
     switch (
         decodeThreePosition(
@@ -188,13 +176,10 @@ void ChannelMapper::update(
     }
 
 
-    // -------------------------------------------------------------------------
     // SD / CH9
-    //
     // Up     -> no button
     // Middle -> Button 8
     // Down   -> Button 9
-    // -------------------------------------------------------------------------
 
     switch (
         decodeThreePosition(
@@ -215,13 +200,10 @@ void ChannelMapper::update(
     }
 
 
-    // -------------------------------------------------------------------------
     // SE / CH10
-    //
     // Up     -> no button
     // Middle -> Button 10
     // Down   -> Button 11
-    // -------------------------------------------------------------------------
 
     switch (
         decodeThreePosition(
@@ -242,13 +224,10 @@ void ChannelMapper::update(
     }
 
 
-    // -------------------------------------------------------------------------
     // SG / CH11
-    //
     // Up     -> no button
     // Middle -> Button 12
     // Down   -> Button 13
-    // -------------------------------------------------------------------------
 
     switch (
         decodeThreePosition(
@@ -269,12 +248,9 @@ void ChannelMapper::update(
     }
 
 
-    // -------------------------------------------------------------------------
     // SH / CH12
-    //
     // Released -> no button
     // Pressed  -> Button 14
-    // -------------------------------------------------------------------------
 
     if (
         decodeTwoPosition(
@@ -284,4 +260,26 @@ void ChannelMapper::update(
     {
         setButton(state, 14);
     }
+
+
+    // -------------------------------------------------------------------------
+    // Additional proportional controls
+    //
+    // CH13 -> Z
+    // CH14 -> X Rotation
+    // CH15 -> Y Rotation
+    // CH16 -> Z Rotation
+    // -------------------------------------------------------------------------
+
+    state.auxAnalog1 =
+        channels.get(ChannelIndex::CH13);
+
+    state.auxAnalog2 =
+        channels.get(ChannelIndex::CH14);
+
+    state.auxAnalog3 =
+        channels.get(ChannelIndex::CH15);
+
+    state.auxAnalog4 =
+        channels.get(ChannelIndex::CH16);
 }
