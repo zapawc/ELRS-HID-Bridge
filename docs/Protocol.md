@@ -299,6 +299,8 @@ The firmware ID is derived from `firmware_version.h` using `major << 24 | minor 
 
 Identity values remain isolated in `bridge_identity.h`, while firmware version is centralized in `firmware_version.h`. The generic construction layer still accepts caller-supplied address/identity data, so project policy remains separate from CRSF encoding mechanics.
 
+CRSF device identity is intentionally aligned with the host-facing USB product identity: both use `ELRS-HID-Bridge`. USB manufacturer/HID descriptor details are host-presentation metadata and are not part of the CRSF protocol.
+
 Hardware validation result:
 
 ```text

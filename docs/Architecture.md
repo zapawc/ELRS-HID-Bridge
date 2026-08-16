@@ -130,6 +130,13 @@ OBS integration, race-station control, pilot-input logging, displays, and other 
 
 ---
 
+### 2.9 Open-source derivative policy
+
+ELRS-HID-Bridge project code is distributed under GPL-3.0-only. The licensing choice is part of the project boundary: downstream development and commercial distribution are allowed, while distributed derivative firmware remains subject to GPL source-availability and copyleft requirements.
+
+Third-party dependencies retain their upstream licenses. `THIRD_PARTY_NOTICES.md` records the dependency-license inventory used for release maintenance.
+
+
 ## 3. Hardware Architecture
 
 ### 3.1 Reference MCU
@@ -498,7 +505,18 @@ Owns USB HID presentation:
 - enumeration,
 - report descriptor,
 - HID report generation,
-- host communication.
+- host communication,
+- HID interface string.
+
+The v1.0 reference identity is:
+
+```text
+USB product       ELRS-HID-Bridge
+HID interface     ELRS-HID-Bridge
+USB manufacturer  zapawc
+```
+
+The USB product/manufacturer descriptors are configured through `platformio.ini`; the HID interface string is set by `UsbHid`. Keep the product and HID interface strings synchronized. The internal PlatformIO environment name `pico` is not a user-facing device identity.
 
 It remains unaware of CRSF details.
 

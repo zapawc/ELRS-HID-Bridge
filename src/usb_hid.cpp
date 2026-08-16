@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h>
-
 #include "usb_hid.h"
 
 namespace
@@ -22,7 +21,6 @@ namespace
 
             0x09, 0x30,       // X
             0x09, 0x31,       // Y
-
             0x15, 0x00,       // Logical Minimum 0
             0x27, 0xFF, 0xFF, 0x00, 0x00, // Logical Maximum 65535
 
@@ -34,7 +32,6 @@ namespace
             // -----------------------------------------------------------------
             // Slider 1 and Slider 2
             // -----------------------------------------------------------------
-
             0x09, 0x36,       // Slider
             0x09, 0x36,       // Slider
 
@@ -51,7 +48,6 @@ namespace
             0x09, 0x33,       // Rx
             0x09, 0x34,       // Ry
             0x09, 0x35,       // Rz
-
             0x75, 0x10,
             0x95, 0x04,
             0x81, 0x02,
@@ -65,7 +61,6 @@ namespace
 
             0x19, 0x01,       // Usage Minimum 1
             0x29, 0x20,       // Usage Maximum 32
-
             0x15, 0x00,       // Logical Minimum 0
             0x25, 0x01,       // Logical Maximum 1
 
@@ -89,7 +84,6 @@ namespace
         uint16_t rx;
         uint16_t ry;
         uint16_t rz;
-
         uint32_t buttons;
     };
 
@@ -118,12 +112,13 @@ void UsbHid::begin()
         sizeof(descHidReport)
     );
 
+    // User-visible HID interface identity. Keep this synchronized with the
+    // USB product string configured in platformio.ini.
     usbHid.setStringDescriptor(
-        "ELRS HID Bridge"
+        "ELRS-HID-Bridge"
     );
 
     usbHid.begin();
-
     if (TinyUSBDevice.mounted())
     {
         TinyUSBDevice.detach();
@@ -158,7 +153,6 @@ void UsbHid::update(
 
     report.y =
         state.pitch;
-
     report.slider1 =
         state.throttle;
 
@@ -170,7 +164,6 @@ void UsbHid::update(
 
     report.rx =
         state.auxAnalog2;
-
     report.ry =
         state.auxAnalog3;
 

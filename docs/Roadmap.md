@@ -228,19 +228,20 @@ The discovery proof-of-concept is valuable because it validates the bidirectiona
 - [x] explicitly define/test AUX analog failsafe behavior
 - [ ] final wiring guide validation
 - [ ] final EdgeTX setup guide validation
+- [ ] pin release-critical PlatformIO/core/library dependency versions
 - [ ] clean build from source on documented environment
 - [ ] release binary
-- [ ] open-source license selected
+- [x] GPL-3.0-only license selected and added
 - [x] canonical firmware version source and CRSF Firmware ID encoding
 - [ ] tag/release process
-- [x] README/Architecture/Protocol/Roadmap synchronized through release-identity checkpoint
+- [x] README/Architecture/Protocol/Roadmap synchronized through GPL/USB-identity checkpoint
 - [ ] final release-candidate documentation validation
 
 ### Current next release gates
 
-1. Select and add the open-source license.
+1. Validate the new `ELRS-HID-Bridge` USB identity on Windows and determine whether any remaining `Pico` label is a Windows cache artifact.
 2. Validate wiring and EdgeTX setup instructions from a clean-reader perspective.
-3. Validate a clean `pico` build from the documented environment.
+3. Pin release-critical PlatformIO/core/library dependency versions, then validate a clean `pico` build from the documented environment.
 4. Define the tag/release procedure and produce a tested release binary.
 5. Perform final release-candidate documentation/regression validation.
 
@@ -502,6 +503,7 @@ commit/tag checkpoint
 ### Control-path regression checklist
 
 - device enumerates as expected
+- Windows user-visible controller identity is recorded (`ELRS-HID-Bridge` expected; stale `Pico` investigated as a cache issue before changing firmware identity)
 - Roll direction/range correct
 - Pitch direction/range correct
 - Throttle direction/range correct
@@ -563,4 +565,4 @@ Before broader public announcement, also document:
 - bug-report guidance
 - contribution/fork guidance
 - prior art/acknowledgements
-- project license
+- project GPL-3.0-only license and third-party notices

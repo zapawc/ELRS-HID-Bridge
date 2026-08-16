@@ -488,9 +488,29 @@ Version tags and final release-number transition policy are tracked in `docs/Rel
 
 ---
 
+## USB Identity
+
+The reference firmware presents a project-specific USB identity rather than the generic MCU/toolchain name:
+
+```text
+USB product       ELRS-HID-Bridge
+HID interface     ELRS-HID-Bridge
+USB manufacturer  zapawc
+```
+
+The PlatformIO environment remains named `pico`; that is an internal build target and is not intended to be the Windows joystick name.
+
+Windows may retain a previously cached game-controller name for an already-enumerated VID/PID. If a freshly flashed bridge still appears as `Pico` in `joy.cpl`, do not change VID/PID as a workaround; first distinguish Windows name caching from the firmware USB descriptors.
+
+---
+
 ## Repository Layout
 
 ```text
+AUTHORS.md
+LICENSE
+THIRD_PARTY_NOTICES.md
+
 docs/
     Architecture.md
     Protocol.md
@@ -539,6 +559,8 @@ Ideas, bug reports, testing, documentation improvements, and pull requests are w
 
 Changes should preserve the critical RC-to-HID path and favor small regression-testable commits over broad rewrites.
 
+Contributions accepted into the project are distributed under the project's GPL-3.0-only license unless explicitly stated otherwise.
+
 ---
 
 ## Roadmap
@@ -549,9 +571,17 @@ See `docs/Roadmap.md`.
 
 ## License
 
-License selection is pending.
+ELRS-HID-Bridge project code is licensed under the **GNU General Public License, version 3 only (`GPL-3.0-only`)**.
 
-An open-source license should be selected before Version 1.0.
+Copyright (C) 2026 Tommy Mills.
+
+You may use, study, modify, redistribute, and commercially distribute the firmware under the GPL-3.0 terms. Distributed derivative versions must preserve the GPL freedoms and provide the corresponding source as required by the license.
+
+See:
+
+- `LICENSE` for the complete GPL-3.0 license text;
+- `AUTHORS.md` for project attribution;
+- `THIRD_PARTY_NOTICES.md` for the current dependency-license inventory.
 
 ---
 

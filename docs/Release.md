@@ -69,7 +69,25 @@ Parameters     0
 
 ---
 
-## 4. Build Environments
+## 4. USB Identity
+
+The reference firmware uses a project-specific USB identity:
+
+```text
+USB product       ELRS-HID-Bridge
+HID interface     ELRS-HID-Bridge
+USB manufacturer  zapawc
+```
+
+`platformio.ini` owns the USB product/manufacturer configuration. `UsbHid` owns the HID interface string. Keep the product and interface strings synchronized.
+
+The PlatformIO environment name `pico` is intentionally retained because it is an internal build-target name, not a product identity.
+
+Windows can cache game-controller naming metadata. If a flashed release candidate still appears as `Pico` in `joy.cpl`, investigate Windows enumeration/cache behavior before changing VID/PID or altering the HID descriptor.
+
+---
+
+## 5. Build Environments
 
 `platformio.ini` defines two environments:
 
@@ -84,13 +102,15 @@ Use the CLI only when troubleshooting specifically requires it; the documented r
 
 ---
 
-## 5. Remaining v1.0 Release Gates
+## 6. Remaining v1.0 Release Gates
 
 ### Release blocking
 
-- [ ] Select and add an open-source license.
+- [x] Add GPL-3.0-only project license and attribution files.
+- [ ] Validate the Windows USB identity (`ELRS-HID-Bridge`) and document any cache-specific behavior.
 - [ ] Validate the wiring instructions against the final reference hardware.
 - [ ] Validate the EdgeTX/ExpressLRS setup instructions from a clean setup perspective.
+- [ ] Pin release-critical PlatformIO/core/library dependency versions so the v1.0 build is reproducible.
 - [ ] Perform a clean `pico` build using the documented environment.
 - [ ] Flash the release candidate and run the full hardware regression checklist.
 - [ ] Produce and retain the tested release firmware binary.
@@ -110,10 +130,12 @@ Use the CLI only when troubleshooting specifically requires it; the documented r
 - [x] EdgeTX discovery under Other Devices.
 - [x] Canonical firmware version source.
 - [x] Deterministic CRSF Firmware ID encoding.
+- [x] GPL-3.0-only license selected.
+- [x] Third-party dependency-license inventory completed for the reference build.
 
 ---
 
-## 6. Version Transition Rules
+## 7. Version Transition Rules
 
 During active development, use a semantic version with a prerelease suffix, for example:
 
@@ -141,11 +163,12 @@ Do not change to `1.0.0` until the release-blocking checklist above is complete 
 
 ---
 
-## 7. Release Regression Checklist
+## 8. Release Regression Checklist
 
 Before tagging a release candidate, verify at minimum:
 
 - USB HID enumerates normally.
+- Windows controller/product identity is checked; `ELRS-HID-Bridge` is expected on a fresh enumeration.
 - Roll direction/range correct.
 - Pitch direction/range correct.
 - Throttle direction/range correct.
@@ -167,7 +190,26 @@ Before tagging a release candidate, verify at minimum:
 
 ---
 
-## 8. Scope Freeze
+## 9. Licensing and Attribution
+
+Project code is licensed under **GPL-3.0-only**.
+
+Release source archives should include at minimum:
+
+```text
+LICENSE
+AUTHORS.md
+THIRD_PARTY_NOTICES.md
+```
+
+The release page should identify the corresponding source tag/commit for every distributed firmware binary. If third-party dependencies change, update `THIRD_PARTY_NOTICES.md` before publishing the release.
+
+Copyright (C) 2026 Tommy Mills.
+
+
+---
+
+## 10. Scope Freeze
 
 Do not delay v1.0 for:
 
