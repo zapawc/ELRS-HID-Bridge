@@ -1,69 +1,100 @@
-# v1.0.0 Final Release Promotion Checkpoint
+# ELRS-HID-Bridge Post-v1.0 Checkpoint 1
 
-This package advances ELRS-HID-Bridge from the published `v1.0.0-rc1` source identity to final `1.0.0` validation.
+## Intent
 
-## Replace these files
+Harden CRSF receive-path regression coverage before adding the first CRSF/EdgeTX configurable parameter.
 
-```text
-src/firmware_version.h
-src/firmware_version_self_test.cpp
-README.md
-CHANGELOG.md
-docs/Release.md
-docs/Release-Checklist.md
-```
+This checkpoint intentionally changes **self-test coverage only**. It does not change production parser, decoder, HID, failsafe, LED, configuration, or CRSF device behavior.
 
-## Add this file
+## Baseline
 
-```text
-docs/Release-Notes-v1.0.0.md
-```
+- Stable release: `v1.0.0`
+- Release commit: `f4403e2db7c2649e6560fafd45ad2d8cba3acacc`
+- Authoritative build environment: PlatformIO `pico`
 
-## Runtime scope
+## Files changed
 
-No CRSF parsing, channel decoding, HID mapping, failsafe behavior, USB descriptors, BOOT behavior, LED behavior, device-discovery behavior, dependency pins, or release-staging code is intentionally changed.
+- `src/crsf_self_test.cpp`
+- `src/crsf_self_test.h`
 
-The release identity changes from:
+## Regression coverage added / strengthened
 
-```text
-1.0.0-rc1
-```
+1. Frozen CRSF `0x16` RC-channel golden frame with fixed expected values for all 16 channels.
+   - The primary positive fixture is no longer generated at runtime by the self-test.
+   - This reduces the risk that test-frame generation and production decoding share the same packing mistake.
 
-to:
+2. Frozen CRSF `0x14` Link Statistics frame.
+   - Exercises the real parser -> dispatcher -> LinkStatisticsDecoder path.
+   - Verifies all ten currently consumed Link Statistics fields, including signed SNR values.
 
-```text
-1.0.0
-```
+3. Corrupt-CRC rejection using the frozen RC fixture.
 
-The CRSF Firmware ID intentionally remains:
+4. Valid CRSF sync/address acceptance using the same frozen frame.
 
-```text
-0x01000000
-```
+5. Invalid sync-byte recovery.
 
-because prerelease labels are not encoded into the numeric CRSF firmware field.
+6. Good frame -> garbage -> good frame recovery.
 
-## Apply
+7. Bad-CRC frame -> good frame recovery.
 
-Copy the package contents over the repository root while preserving the included directory structure.
+8. Repeated invalid-length resynchronization followed by a valid frame.
 
-Do not copy `CHANGESET.md` into the repository unless you want to retain it as local release-working documentation.
+## Intentionally unchanged
 
-## Build / validation gate
+- USB HID descriptor and mapping
+- Eight-axis HID behavior
+- Receiver timeout / failsafe behavior
+- Link-state precedence rules
+- CRSF frame parser implementation
+- CRSF dispatcher implementation
+- CRSF device discovery behavior
+- EdgeTX interaction
+- LED behavior
+- BOOT-button behavior
+- Persistent configuration
+- `pico_debug`
 
-1. Use the normal VS Code PlatformIO workflow.
-2. Select/build the `pico` environment only.
-3. Confirm the build completes with no project errors/VS Code Problems.
-4. Flash the resulting final-source firmware.
-5. Complete `docs/Release-Checklist.md` from top to bottom.
-6. Do not tag or publish `v1.0.0` until every release-blocking item passes.
-7. After validation, run `tools/Stage-Release.ps1` to stage a newly built final UF2/hash/manifest.
-8. Verify the staged manifest identifies version `1.0.0` and the exact tested Git commit.
+## Build / validation
 
-Do **not** rename the RC1 UF2 as the final artifact.
+Use the established VS Code / PlatformIO workflow.
 
-## Suggested commit message
+1. Overlay the ZIP contents into the repository root.
+2. Open the project in VS Code.
+3. Confirm there are no new entries in **Problems**.
+4. Build the normal `pico` environment.
+5. Flash the normal `pico` build to the QT Py RP2040.
+6. Confirm startup completes normally. A CRSF self-test failure should prevent the normal startup state, so normal operation is the first hardware indication that all added fixtures passed.
 
-```text
-Promote release identity to v1.0.0
-```
+## Hardware smoke regression
+
+With the established RP2 / Ranger / EdgeTX setup:
+
+1. TX off at bridge startup: confirm expected disconnected/failsafe indication.
+2. Power TX and establish the ELRS link: confirm normal green operational state.
+3. Open Windows `joy.cpl`:
+   - verify Roll, Pitch, Throttle, and Yaw directions remain correct;
+   - verify auxiliary analog axes still respond;
+   - verify representative buttons still respond.
+4. Power the TX off:
+   - verify all eight analog HID controls neutralize;
+   - verify all buttons release;
+   - verify failsafe indication remains correct.
+5. Power the TX back on:
+   - verify normal control recovers without rebooting the bridge.
+6. Optional but recommended: launch Liftoff and confirm normal simulator control.
+
+## Commit boundary
+
+If build and hardware regression pass, commit this checkpoint independently before beginning CRSF parameter work.
+
+Suggested commit message:
+
+`test: harden CRSF receive-path regression coverage`
+
+## Next checkpoint
+
+Implement the first CRSF/EdgeTX parameter proof of concept:
+
+**LED brightness, represented as a standard CRSF FLOAT parameter from 0-100%.**
+
+Do not add persistence in that checkpoint. The first objective is to prove discovery, read, write, validation, runtime configuration update, and visible LED behavior while preserving the v1.0.0 HID/failsafe baseline.

@@ -3,7 +3,7 @@
 class CrsfSelfTest
 {
 public:
-    // Runs deterministic tests of the CRSF RC-channel decode path.
+    // Runs deterministic regression tests of the CRSF receive path.
     //
     // Returns true only if all tests pass.
     static bool run();
