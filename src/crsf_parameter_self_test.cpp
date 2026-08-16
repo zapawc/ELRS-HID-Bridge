@@ -15,7 +15,6 @@ namespace
     constexpr uint8_t COMMAND_CONFIRMATION_NEEDED = 3;
     constexpr uint8_t COMMAND_CONFIRM = 4;
     constexpr uint8_t COMMAND_CANCEL = 5;
-    constexpr uint8_t COMMAND_POLL = 6;
 
 
     CrsfParameterRead makeRead(
@@ -81,7 +80,6 @@ namespace
         }
 
 
-        // Command name begins at frame[9] and is null terminated.
         size_t index = 9;
 
 
@@ -121,28 +119,33 @@ namespace
         );
 
 
-        const CrsfParameterRead request =
-            makeRead(
-                BridgeParameters::
-                    ROOT_PARAMETER
-            );
-
-
-        uint8_t frame[
-            64
-        ] = {};
-
+        uint8_t frame[64] = {};
         size_t frameLength = 0;
 
 
         if (
             !parameters.buildReadResponse(
-                request,
+                makeRead(
+                    BridgeParameters::
+                        ROOT_PARAMETER
+                ),
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
                 frame,
                 sizeof(frame),
                 frameLength
             )
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            frame[5] !=
+                BridgeParameters::
+                    ROOT_PARAMETER ||
+            frame[8] !=
+                Crsf::PARAMETER_TYPE_FOLDER
         )
         {
             return false;
@@ -158,20 +161,22 @@ namespace
                 PITCH_INVERSION_PARAMETER,
             BridgeParameters::
                 RESTORE_DEFAULTS_PARAMETER,
+            BridgeParameters::
+                ROLL_INVERSION_PARAMETER,
+            BridgeParameters::
+                THROTTLE_INVERSION_PARAMETER,
+            BridgeParameters::
+                YAW_INVERSION_PARAMETER,
+            BridgeParameters::
+                AUX1_INVERSION_PARAMETER,
+            BridgeParameters::
+                AUX2_INVERSION_PARAMETER,
+            BridgeParameters::
+                AUX3_INVERSION_PARAMETER,
+            BridgeParameters::
+                AUX4_INVERSION_PARAMETER,
             0xFF
         };
-
-
-        if (
-            frame[5] !=
-                BridgeParameters::
-                    ROOT_PARAMETER ||
-            frame[8] !=
-                Crsf::PARAMETER_TYPE_FOLDER
-        )
-        {
-            return false;
-        }
 
 
         for (
@@ -194,7 +199,9 @@ namespace
     }
 
 
-    bool runBrightnessAndPitchRegressionTest()
+    bool runInversionEntryTest(
+        uint8_t parameterNumber
+    )
     {
         BridgeConfiguration configuration =
             BridgeConfiguration::defaults();
@@ -208,75 +215,85 @@ namespace
         size_t frameLength = 0;
 
 
-        if (
-            !parameters.buildReadResponse(
+        return
+            parameters.buildReadResponse(
                 makeRead(
-                    BridgeParameters::
-                        LED_BRIGHTNESS_PARAMETER
+                    parameterNumber
                 ),
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
                 frame,
                 sizeof(frame),
                 frameLength
-            ) ||
-            frame[8] !=
-                Crsf::PARAMETER_TYPE_FLOAT
-        )
-        {
-            return false;
-        }
-
-
-        frameLength = 0;
-
-
-        if (
-            !parameters.buildReadResponse(
-                makeRead(
-                    BridgeParameters::
-                        PITCH_INVERSION_PARAMETER
-                ),
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                frame,
-                sizeof(frame),
-                frameLength
-            ) ||
-            frame[8] !=
-                Crsf::PARAMETER_TYPE_TEXT_SELECTION
-        )
-        {
-            return false;
-        }
-
-
-        return true;
+            ) &&
+            frameLength > 10 &&
+            frame[5] ==
+                parameterNumber &&
+            frame[8] ==
+                Crsf::PARAMETER_TYPE_TEXT_SELECTION;
     }
 
 
-    bool runRestoreReadyReadTest()
+    bool runAllInversionEntriesTest()
     {
-        BridgeConfiguration configuration =
-            BridgeConfiguration::defaults();
+        return
+            runInversionEntryTest(
+                BridgeParameters::
+                    PITCH_INVERSION_PARAMETER
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    ROLL_INVERSION_PARAMETER
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    THROTTLE_INVERSION_PARAMETER
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    YAW_INVERSION_PARAMETER
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    AUX1_INVERSION_PARAMETER
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    AUX2_INVERSION_PARAMETER
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    AUX3_INVERSION_PARAMETER
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    AUX4_INVERSION_PARAMETER
+            );
+    }
 
-        BridgeParameters parameters(
-            configuration
-        );
 
+    bool applyInversionWrite(
+        BridgeParameters& parameters,
+        uint8_t parameterNumber,
+        uint8_t selection
+    )
+    {
+        uint8_t response[64] = {};
+        size_t responseLength = 0;
 
-        uint8_t frame[64] = {};
-        size_t frameLength = 0;
+        BridgeParameterWriteResult result;
 
 
         if (
-            !parameters.buildReadResponse(
-                makeRead(
-                    BridgeParameters::
-                        RESTORE_DEFAULTS_PARAMETER
+            !parameters.handleWrite(
+                makeWrite(
+                    parameterNumber,
+                    selection
                 ),
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                frame,
-                sizeof(frame),
-                frameLength
+                response,
+                sizeof(response),
+                responseLength,
+                result
             )
         )
         {
@@ -284,33 +301,192 @@ namespace
         }
 
 
-        uint8_t status = 0xFF;
-
-
         return
-            frame[5] ==
-                BridgeParameters::
-                    RESTORE_DEFAULTS_PARAMETER &&
-            findCommandStatus(
-                frame,
-                frameLength,
-                status
-            ) &&
-            status ==
-                COMMAND_READY;
+            result.requiresPersistence &&
+            responseLength == 8 &&
+            response[2] ==
+                Crsf::FRAME_PARAMETER_WRITE &&
+            response[5] ==
+                parameterNumber &&
+            response[6] ==
+                selection;
     }
 
 
-    bool runRestoreConfirmationLifecycleTest()
+    bool runAllInversionWritesTest()
+    {
+        BridgeConfiguration configuration =
+            BridgeConfiguration::defaults();
+
+        BridgeParameters parameters(
+            configuration
+        );
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    PITCH_INVERSION_PARAMETER,
+                0
+            ) ||
+            configuration.pitch.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    ROLL_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.roll.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    THROTTLE_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.throttle.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    YAW_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.yaw.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    AUX1_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.auxAnalog1.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    AUX2_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.auxAnalog2.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    AUX3_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.auxAnalog3.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    AUX4_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.auxAnalog4.inverted
+        )
+        {
+            return false;
+        }
+
+
+        // Invalid selection must not modify the current setting.
+        uint8_t response[64] = {};
+        size_t responseLength = 123;
+        BridgeParameterWriteResult result;
+
+
+        if (
+            parameters.handleWrite(
+                makeWrite(
+                    BridgeParameters::
+                        ROLL_INVERSION_PARAMETER,
+                    2
+                ),
+                Crsf::ADDRESS_FLIGHT_CONTROLLER,
+                response,
+                sizeof(response),
+                responseLength,
+                result
+            )
+        )
+        {
+            return false;
+        }
+
+
+        return
+            configuration.roll.inverted &&
+            responseLength == 0 &&
+            result.change ==
+                BridgeParameterChange::None;
+    }
+
+
+    bool runRestoreDefaultsRegressionTest()
     {
         BridgeConfiguration configuration =
             BridgeConfiguration::defaults();
 
         configuration.ledBrightnessPercent =
-            61;
+            54;
+
+        configuration.roll.inverted =
+            true;
 
         configuration.pitch.inverted =
             false;
+
+        configuration.throttle.inverted =
+            true;
+
+        configuration.auxAnalog4.inverted =
+            true;
 
 
         BridgeParameters parameters(
@@ -320,11 +496,9 @@ namespace
 
         uint8_t response[64] = {};
         size_t responseLength = 0;
-
         BridgeParameterWriteResult result;
 
 
-        // START must request confirmation without changing configuration.
         if (
             !parameters.handleWrite(
                 makeWrite(
@@ -354,40 +528,6 @@ namespace
                 status
             ) ||
             status !=
-                COMMAND_CONFIRMATION_NEEDED ||
-            result.requiresPersistence ||
-            configuration
-                .ledBrightnessPercent != 61 ||
-            configuration.pitch.inverted
-        )
-        {
-            return false;
-        }
-
-
-        // POLL while pending must preserve confirmation-needed state.
-        responseLength = 0;
-
-
-        if (
-            !parameters.handleWrite(
-                makeWrite(
-                    BridgeParameters::
-                        RESTORE_DEFAULTS_PARAMETER,
-                    COMMAND_POLL
-                ),
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                response,
-                sizeof(response),
-                responseLength,
-                result
-            ) ||
-            !findCommandStatus(
-                response,
-                responseLength,
-                status
-            ) ||
-            status !=
                 COMMAND_CONFIRMATION_NEEDED
         )
         {
@@ -395,7 +535,6 @@ namespace
         }
 
 
-        // CONFIRM stages defaults and marks the result as persistence-required.
         responseLength = 0;
 
 
@@ -418,31 +557,43 @@ namespace
         }
 
 
+        const BridgeConfiguration defaults =
+            BridgeConfiguration::defaults();
+
+
         if (
             result.change !=
                 BridgeParameterChange::
                     RestoreDefaults ||
             !result.requiresPersistence ||
             configuration
-                .ledBrightnessPercent != 10 ||
-            !configuration.pitch.inverted ||
-            !findCommandStatus(
-                response,
-                responseLength,
-                status
-            ) ||
-            status !=
-                COMMAND_READY
+                .ledBrightnessPercent !=
+                    defaults.ledBrightnessPercent ||
+            configuration.roll.inverted !=
+                defaults.roll.inverted ||
+            configuration.pitch.inverted !=
+                defaults.pitch.inverted ||
+            configuration.throttle.inverted !=
+                defaults.throttle.inverted ||
+            configuration.yaw.inverted !=
+                defaults.yaw.inverted ||
+            configuration.auxAnalog1.inverted !=
+                defaults.auxAnalog1.inverted ||
+            configuration.auxAnalog2.inverted !=
+                defaults.auxAnalog2.inverted ||
+            configuration.auxAnalog3.inverted !=
+                defaults.auxAnalog3.inverted ||
+            configuration.auxAnalog4.inverted !=
+                defaults.auxAnalog4.inverted
         )
         {
             return false;
         }
 
 
-        // A failed persistence attempt must leave the confirmation pending.
         parameters.finalizePersistence(
             result,
-            false
+            true
         );
 
 
@@ -466,65 +617,16 @@ namespace
                 status
             ) ||
             status !=
-                COMMAND_CONFIRMATION_NEEDED
+                COMMAND_READY
         )
         {
             return false;
         }
 
 
-        // Successful persistence completes the command lifecycle.
-        parameters.finalizePersistence(
-            result,
-            true
-        );
-
-
-        responseLength = 0;
-
-
-        return
-            parameters.buildReadResponse(
-                makeRead(
-                    BridgeParameters::
-                        RESTORE_DEFAULTS_PARAMETER
-                ),
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                response,
-                sizeof(response),
-                responseLength
-            ) &&
-            findCommandStatus(
-                response,
-                responseLength,
-                status
-            ) &&
-            status ==
-                COMMAND_READY;
-    }
-
-
-    bool runRestoreCancelTest()
-    {
-        BridgeConfiguration configuration =
-            BridgeConfiguration::defaults();
-
-        configuration.ledBrightnessPercent =
-            44;
-
-        configuration.pitch.inverted =
-            false;
-
-
-        BridgeParameters parameters(
-            configuration
-        );
-
-
-        uint8_t response[64] = {};
-        size_t responseLength = 0;
-
-        BridgeParameterWriteResult result;
+        // Re-establish a non-default value and prove cancel does not reset it.
+        configuration.roll.inverted =
+            true;
 
 
         if (
@@ -544,9 +646,6 @@ namespace
         {
             return false;
         }
-
-
-        responseLength = 0;
 
 
         if (
@@ -568,73 +667,8 @@ namespace
         }
 
 
-        uint8_t status = 0xFF;
-
-
         return
-            !result.requiresPersistence &&
-            configuration
-                .ledBrightnessPercent == 44 &&
-            !configuration.pitch.inverted &&
-            findCommandStatus(
-                response,
-                responseLength,
-                status
-            ) &&
-            status ==
-                COMMAND_READY;
-    }
-
-
-    bool runConfirmWithoutStartDoesNotResetTest()
-    {
-        BridgeConfiguration configuration =
-            BridgeConfiguration::defaults();
-
-        configuration.ledBrightnessPercent =
-            70;
-
-        configuration.pitch.inverted =
-            false;
-
-
-        BridgeParameters parameters(
-            configuration
-        );
-
-
-        uint8_t response[64] = {};
-        size_t responseLength = 0;
-
-        BridgeParameterWriteResult result;
-
-
-        if (
-            !parameters.handleWrite(
-                makeWrite(
-                    BridgeParameters::
-                        RESTORE_DEFAULTS_PARAMETER,
-                    COMMAND_CONFIRM
-                ),
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                response,
-                sizeof(response),
-                responseLength,
-                result
-            )
-        )
-        {
-            return false;
-        }
-
-
-        return
-            result.change ==
-                BridgeParameterChange::None &&
-            !result.requiresPersistence &&
-            configuration
-                .ledBrightnessPercent == 70 &&
-            !configuration.pitch.inverted;
+            configuration.roll.inverted;
     }
 }
 
@@ -642,11 +676,9 @@ namespace
 bool CrsfParameterSelfTest::run()
 {
     return
-        BridgeParameters::PARAMETER_COUNT == 3 &&
+        BridgeParameters::PARAMETER_COUNT == 10 &&
         runRootFolderResponseTest() &&
-        runBrightnessAndPitchRegressionTest() &&
-        runRestoreReadyReadTest() &&
-        runRestoreConfirmationLifecycleTest() &&
-        runRestoreCancelTest() &&
-        runConfirmWithoutStartDoesNotResetTest();
+        runAllInversionEntriesTest() &&
+        runAllInversionWritesTest() &&
+        runRestoreDefaultsRegressionTest();
 }

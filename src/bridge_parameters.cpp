@@ -14,6 +14,118 @@ BridgeParameters::BridgeParameters(
 }
 
 
+bool BridgeParameters::buildInversionParameterResponse(
+    const CrsfParameterRead& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    const char* name,
+    const AxisMapping& mapping,
+    bool defaultInverted,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    CrsfDevice responseBuilder;
+
+
+    return
+        responseBuilder
+            .buildTextSelectionParameterResponse(
+                request,
+                localAddress,
+                parameterNumber,
+                ROOT_PARAMETER,
+                name,
+                "Normal;Inverted",
+                mapping.inverted
+                    ? AXIS_INVERTED
+                    : AXIS_NORMAL,
+                AXIS_NORMAL,
+                AXIS_INVERTED,
+                defaultInverted
+                    ? AXIS_INVERTED
+                    : AXIS_NORMAL,
+                "",
+                output,
+                outputCapacity,
+                outputLength
+            );
+}
+
+
+bool BridgeParameters::handleInversionWrite(
+    const CrsfParameterWrite& request,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    AxisMapping& mapping,
+    BridgeParameterChange change,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength,
+    BridgeParameterWriteResult& result
+)
+{
+    if (
+        request.dataLength != 1
+    )
+    {
+        return false;
+    }
+
+
+    const uint8_t selection =
+        request.data[0];
+
+
+    if (
+        selection != AXIS_NORMAL &&
+        selection != AXIS_INVERTED
+    )
+    {
+        return false;
+    }
+
+
+    CrsfDevice responseBuilder;
+
+
+    if (
+        !responseBuilder
+            .buildTextSelectionWriteResponse(
+                request,
+                localAddress,
+                parameterNumber,
+                selection,
+                output,
+                outputCapacity,
+                outputLength
+            )
+    )
+    {
+        return false;
+    }
+
+
+    mapping.inverted =
+        selection ==
+        AXIS_INVERTED;
+
+
+    result.change =
+        change;
+
+    result.pitchInverted =
+        configuration.pitch.inverted;
+
+    result.requiresPersistence =
+        true;
+
+
+    return true;
+}
+
+
 bool BridgeParameters::buildRestoreDefaultsResponse(
     uint8_t destination,
     uint8_t origin,
@@ -60,6 +172,9 @@ bool BridgeParameters::buildReadResponse(
 
     CrsfDevice responseBuilder;
 
+    const BridgeConfiguration defaults =
+        BridgeConfiguration::defaults();
+
 
     switch (
         request.parameterNumber
@@ -71,7 +186,14 @@ bool BridgeParameters::buildReadResponse(
             {
                 LED_BRIGHTNESS_PARAMETER,
                 PITCH_INVERSION_PARAMETER,
-                RESTORE_DEFAULTS_PARAMETER
+                RESTORE_DEFAULTS_PARAMETER,
+                ROLL_INVERSION_PARAMETER,
+                THROTTLE_INVERSION_PARAMETER,
+                YAW_INVERSION_PARAMETER,
+                AUX1_INVERSION_PARAMETER,
+                AUX2_INVERSION_PARAMETER,
+                AUX3_INVERSION_PARAMETER,
+                AUX4_INVERSION_PARAMETER
             };
 
 
@@ -109,10 +231,6 @@ bool BridgeParameters::buildReadResponse(
                         LED_BRIGHTNESS_DEFAULT,
                         0,
                         LED_BRIGHTNESS_STEP,
-
-                        // ExpressLRS elrs.lua r18 directly appends the
-                        // unit to a Lua string.format pattern. A literal
-                        // "%" therefore causes a formatter exception.
                         "",
                         output,
                         outputCapacity,
@@ -123,30 +241,18 @@ bool BridgeParameters::buildReadResponse(
 
         case PITCH_INVERSION_PARAMETER:
         {
-            const uint8_t currentValue =
-                configuration.pitch.inverted
-                    ? PITCH_INVERTED
-                    : PITCH_NORMAL;
-
-
             return
-                responseBuilder
-                    .buildTextSelectionParameterResponse(
-                        request,
-                        localAddress,
-                        PITCH_INVERSION_PARAMETER,
-                        ROOT_PARAMETER,
-                        "Pitch Inversion",
-                        "Normal;Inverted",
-                        currentValue,
-                        PITCH_NORMAL,
-                        PITCH_INVERTED,
-                        PITCH_INVERSION_DEFAULT,
-                        "",
-                        output,
-                        outputCapacity,
-                        outputLength
-                    );
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    PITCH_INVERSION_PARAMETER,
+                    "Pitch Inversion",
+                    configuration.pitch,
+                    defaults.pitch.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
         }
 
 
@@ -171,6 +277,125 @@ bool BridgeParameters::buildReadResponse(
                     restoreDefaultsConfirmationPending
                         ? "Restore defaults?"
                         : "",
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
+
+
+        case ROLL_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    ROLL_INVERSION_PARAMETER,
+                    "Roll Inversion",
+                    configuration.roll,
+                    defaults.roll.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
+
+
+        case THROTTLE_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    THROTTLE_INVERSION_PARAMETER,
+                    "Throttle Inversion",
+                    configuration.throttle,
+                    defaults.throttle.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
+
+
+        case YAW_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    YAW_INVERSION_PARAMETER,
+                    "Yaw Inversion",
+                    configuration.yaw,
+                    defaults.yaw.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
+
+
+        case AUX1_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    AUX1_INVERSION_PARAMETER,
+                    "Aux 1 Inversion",
+                    configuration.auxAnalog1,
+                    defaults.auxAnalog1.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
+
+
+        case AUX2_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    AUX2_INVERSION_PARAMETER,
+                    "Aux 2 Inversion",
+                    configuration.auxAnalog2,
+                    defaults.auxAnalog2.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
+
+
+        case AUX3_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    AUX3_INVERSION_PARAMETER,
+                    "Aux 3 Inversion",
+                    configuration.auxAnalog3,
+                    defaults.auxAnalog3.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
+
+
+        case AUX4_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    AUX4_INVERSION_PARAMETER,
+                    "Aux 4 Inversion",
+                    configuration.auxAnalog4,
+                    defaults.auxAnalog4.inverted,
                     output,
                     outputCapacity,
                     outputLength
@@ -287,64 +512,19 @@ bool BridgeParameters::handleWrite(
 
         case PITCH_INVERSION_PARAMETER:
         {
-            if (
-                request.dataLength != 1
-            )
-            {
-                return false;
-            }
-
-
-            const uint8_t selection =
-                request.data[0];
-
-
-            if (
-                selection != PITCH_NORMAL &&
-                selection != PITCH_INVERTED
-            )
-            {
-                return false;
-            }
-
-
-            CrsfDevice responseBuilder;
-
-
-            if (
-                !responseBuilder
-                    .buildTextSelectionWriteResponse(
-                        request,
-                        localAddress,
-                        PITCH_INVERSION_PARAMETER,
-                        selection,
-                        output,
-                        outputCapacity,
-                        outputLength
-                    )
-            )
-            {
-                return false;
-            }
-
-
-            configuration.pitch.inverted =
-                selection ==
-                PITCH_INVERTED;
-
-
-            result.change =
-                BridgeParameterChange::
-                    PitchInversion;
-
-            result.pitchInverted =
-                configuration.pitch.inverted;
-
-            result.requiresPersistence =
-                true;
-
-
-            return true;
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    PITCH_INVERSION_PARAMETER,
+                    configuration.pitch,
+                    BridgeParameterChange::
+                        PitchInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
         }
 
 
@@ -423,9 +603,6 @@ bool BridgeParameters::handleWrite(
                         true;
 
 
-                    // The response is constructed now but main.cpp does not
-                    // transmit it until the default configuration has been
-                    // committed successfully.
                     return
                         buildRestoreDefaultsResponse(
                             request.destination,
@@ -485,6 +662,132 @@ bool BridgeParameters::handleWrite(
                     return false;
                 }
             }
+        }
+
+
+        case ROLL_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    ROLL_INVERSION_PARAMETER,
+                    configuration.roll,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
+        }
+
+
+        case THROTTLE_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    THROTTLE_INVERSION_PARAMETER,
+                    configuration.throttle,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
+        }
+
+
+        case YAW_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    YAW_INVERSION_PARAMETER,
+                    configuration.yaw,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
+        }
+
+
+        case AUX1_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    AUX1_INVERSION_PARAMETER,
+                    configuration.auxAnalog1,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
+        }
+
+
+        case AUX2_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    AUX2_INVERSION_PARAMETER,
+                    configuration.auxAnalog2,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
+        }
+
+
+        case AUX3_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    AUX3_INVERSION_PARAMETER,
+                    configuration.auxAnalog3,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
+        }
+
+
+        case AUX4_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    AUX4_INVERSION_PARAMETER,
+                    configuration.auxAnalog4,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
         }
 
 

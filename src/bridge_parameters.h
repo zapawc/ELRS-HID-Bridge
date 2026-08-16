@@ -12,6 +12,7 @@ enum class BridgeParameterChange
     None,
     LedBrightness,
     PitchInversion,
+    AxisInversion,
     RestoreDefaults
 };
 
@@ -34,9 +35,10 @@ struct BridgeParameterWriteResult
 class BridgeParameters
 {
 public:
-    // Parameter 0 is the standard root folder.
+    // Existing parameter IDs remain stable.
     //
-    // Normal numbered parameters begin at 1.
+    // New inversion parameters are appended after the already-released
+    // Restore Defaults command rather than renumbering existing entries.
     static constexpr uint8_t ROOT_PARAMETER = 0;
 
     static constexpr uint8_t LED_BRIGHTNESS_PARAMETER = 1;
@@ -45,7 +47,21 @@ public:
 
     static constexpr uint8_t RESTORE_DEFAULTS_PARAMETER = 3;
 
-    static constexpr uint8_t PARAMETER_COUNT = 3;
+    static constexpr uint8_t ROLL_INVERSION_PARAMETER = 4;
+
+    static constexpr uint8_t THROTTLE_INVERSION_PARAMETER = 5;
+
+    static constexpr uint8_t YAW_INVERSION_PARAMETER = 6;
+
+    static constexpr uint8_t AUX1_INVERSION_PARAMETER = 7;
+
+    static constexpr uint8_t AUX2_INVERSION_PARAMETER = 8;
+
+    static constexpr uint8_t AUX3_INVERSION_PARAMETER = 9;
+
+    static constexpr uint8_t AUX4_INVERSION_PARAMETER = 10;
+
+    static constexpr uint8_t PARAMETER_COUNT = 10;
 
 
     explicit BridgeParameters(
@@ -53,8 +69,6 @@ public:
     );
 
 
-    // Build the appropriate CRSF Parameter Settings Entry (0x2B)
-    // response for a validated Parameter Read (0x2C).
     bool buildReadResponse(
         const CrsfParameterRead& request,
         uint8_t localAddress,
@@ -64,17 +78,6 @@ public:
     ) const;
 
 
-    // Validate and process a CRSF Parameter Write (0x2D).
-    //
-    // For FLOAT/TEXT_SELECTION:
-    // - BridgeConfiguration is updated,
-    // - result.requiresPersistence is true,
-    // - output contains the normal 0x2D acknowledgement.
-    //
-    // For Restore Defaults COMMAND:
-    // - START returns CONFIRMATION_NEEDED without changing configuration,
-    // - CONFIRM stages BridgeConfiguration::defaults() and requires persistence,
-    // - CANCEL/POLL return the appropriate command-state 0x2B entry.
     bool handleWrite(
         const CrsfParameterWrite& request,
         uint8_t localAddress,
@@ -85,11 +88,6 @@ public:
     );
 
 
-    // Complete transactional state after main.cpp attempts persistence.
-    //
-    // For Restore Defaults, successful persistence clears the pending
-    // confirmation state. Failed persistence intentionally leaves it pending so
-    // the host can poll/retry rather than seeing a false READY state.
     void finalizePersistence(
         const BridgeParameterWriteResult& result,
         bool succeeded
@@ -103,11 +101,8 @@ private:
     static constexpr int32_t LED_BRIGHTNESS_STEP = 1;
 
 
-    static constexpr uint8_t PITCH_NORMAL = 0;
-    static constexpr uint8_t PITCH_INVERTED = 1;
-
-    static constexpr uint8_t PITCH_INVERSION_DEFAULT =
-        PITCH_INVERTED;
+    static constexpr uint8_t AXIS_NORMAL = 0;
+    static constexpr uint8_t AXIS_INVERTED = 1;
 
 
     // CRSF COMMAND lifecycle states.
@@ -119,10 +114,33 @@ private:
     static constexpr uint8_t COMMAND_CANCEL = 5;
     static constexpr uint8_t COMMAND_POLL = 6;
 
-    // ExpressLRS Lua r18 uses this value as the interval before a follow-up
-    // command query. Responses in this checkpoint are immediate; 50 provides
-    // comfortable margin without creating a long stale popup.
     static constexpr uint8_t RESTORE_DEFAULTS_TIMEOUT = 50;
+
+
+    bool buildInversionParameterResponse(
+        const CrsfParameterRead& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        const char* name,
+        const AxisMapping& mapping,
+        bool defaultInverted,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
+    bool handleInversionWrite(
+        const CrsfParameterWrite& request,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        AxisMapping& mapping,
+        BridgeParameterChange change,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength,
+        BridgeParameterWriteResult& result
+    );
 
 
     bool buildRestoreDefaultsResponse(

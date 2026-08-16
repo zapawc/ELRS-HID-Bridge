@@ -590,11 +590,23 @@ void loop()
 
 
                     case BridgeParameterChange::
+                        AxisInversion:
+                    {
+                        // All analog mappings reference BridgeConfiguration
+                        // directly. The persisted inversion setting is consumed
+                        // on the next RC frame without a mapper rebuild.
+
+                        break;
+                    }
+
+
+                    case BridgeParameterChange::
                         RestoreDefaults:
                     {
                         // Restore every application-side setting that has an
                         // immediate presentation effect. ChannelMapper already
-                        // references BridgeConfiguration for pitch inversion.
+                        // references BridgeConfiguration for every analog
+                        // inversion setting.
                         statusLed
                             .setBrightnessPercent(
                                 result

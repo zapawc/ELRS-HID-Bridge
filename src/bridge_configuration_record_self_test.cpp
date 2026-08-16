@@ -17,8 +17,22 @@ namespace
         return
             left.ledBrightnessPercent ==
                 right.ledBrightnessPercent &&
+            left.roll.inverted ==
+                right.roll.inverted &&
             left.pitch.inverted ==
-                right.pitch.inverted;
+                right.pitch.inverted &&
+            left.throttle.inverted ==
+                right.throttle.inverted &&
+            left.yaw.inverted ==
+                right.yaw.inverted &&
+            left.auxAnalog1.inverted ==
+                right.auxAnalog1.inverted &&
+            left.auxAnalog2.inverted ==
+                right.auxAnalog2.inverted &&
+            left.auxAnalog3.inverted ==
+                right.auxAnalog3.inverted &&
+            left.auxAnalog4.inverted ==
+                right.auxAnalog4.inverted;
     }
 
 
@@ -28,11 +42,15 @@ namespace
             BridgeConfiguration::defaults();
 
 
-        source.ledBrightnessPercent =
-            73;
-
-        source.pitch.inverted =
-            false;
+        source.ledBrightnessPercent = 73;
+        source.roll.inverted = true;
+        source.pitch.inverted = false;
+        source.throttle.inverted = true;
+        source.yaw.inverted = true;
+        source.auxAnalog1.inverted = true;
+        source.auxAnalog2.inverted = false;
+        source.auxAnalog3.inverted = true;
+        source.auxAnalog4.inverted = false;
 
 
         uint8_t record[
@@ -47,6 +65,17 @@ namespace
                 record,
                 sizeof(record)
             )
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            record[4] !=
+                BridgeConfigurationRecord::
+                    SCHEMA_VERSION ||
+            record[5] != 3
         )
         {
             return false;
@@ -74,6 +103,71 @@ namespace
                 source,
                 decoded
             );
+    }
+
+
+    bool runLegacySchemaMigrationTest()
+    {
+        // Real schema-v1 record:
+        //
+        // LED = 73
+        // Pitch = Normal
+        // CRC-32 = 0x6FF9B73A
+        //
+        // New inversion fields did not exist in schema v1 and must therefore
+        // retain BridgeConfiguration::defaults().
+        constexpr uint8_t legacyRecord[
+            BridgeConfigurationRecord::
+                RECORD_SIZE
+        ] =
+        {
+            'E', 'H', 'B', '1',
+            0x01,
+            0x02,
+            0x49,
+            0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x6F, 0xF9, 0xB7, 0x3A
+        };
+
+
+        BridgeConfiguration decoded =
+            BridgeConfiguration::defaults();
+
+
+        if (
+            !BridgeConfigurationRecord::decode(
+                legacyRecord,
+                sizeof(legacyRecord),
+                decoded
+            )
+        )
+        {
+            return false;
+        }
+
+
+        const BridgeConfiguration defaults =
+            BridgeConfiguration::defaults();
+
+
+        return
+            decoded.ledBrightnessPercent == 73 &&
+            !decoded.pitch.inverted &&
+            decoded.roll.inverted ==
+                defaults.roll.inverted &&
+            decoded.throttle.inverted ==
+                defaults.throttle.inverted &&
+            decoded.yaw.inverted ==
+                defaults.yaw.inverted &&
+            decoded.auxAnalog1.inverted ==
+                defaults.auxAnalog1.inverted &&
+            decoded.auxAnalog2.inverted ==
+                defaults.auxAnalog2.inverted &&
+            decoded.auxAnalog3.inverted ==
+                defaults.auxAnalog3.inverted &&
+            decoded.auxAnalog4.inverted ==
+                defaults.auxAnalog4.inverted;
     }
 
 
@@ -107,11 +201,9 @@ namespace
         BridgeConfiguration target =
             BridgeConfiguration::defaults();
 
-        target.ledBrightnessPercent =
-            67;
-
-        target.pitch.inverted =
-            false;
+        target.ledBrightnessPercent = 67;
+        target.roll.inverted = true;
+        target.pitch.inverted = false;
 
 
         const BridgeConfiguration before =
@@ -138,7 +230,7 @@ namespace
     }
 
 
-    bool runWrongSchemaRejectedTest()
+    bool runUnsupportedSchemaRejectedTest()
     {
         BridgeConfiguration source =
             BridgeConfiguration::defaults();
@@ -162,9 +254,6 @@ namespace
         }
 
 
-        // Schema is protected by CRC. The test intentionally leaves the
-        // original CRC in place: either the schema gate or CRC gate must reject
-        // the record, and configuration must remain unchanged.
         record[4] =
             static_cast<uint8_t>(
                 BridgeConfigurationRecord::
@@ -211,6 +300,9 @@ namespace
         source.ledBrightnessPercent =
             55;
 
+        source.roll.inverted =
+            true;
+
 
         uint8_t record[
             BridgeConfigurationRecord::
@@ -230,8 +322,7 @@ namespace
         }
 
 
-        // Corrupt a payload byte while retaining the original CRC.
-        record[6] ^= 0x01;
+        record[8] ^= 0x01;
 
 
         BridgeConfiguration target =
@@ -270,8 +361,6 @@ namespace
 
     bool runInvalidValueRejectedTest()
     {
-        // A record with a valid CRC but an invalid LED value is easiest to
-        // produce by first verifying that encode itself refuses it.
         BridgeConfiguration invalid =
             BridgeConfiguration::defaults();
 
@@ -337,8 +426,9 @@ bool BridgeConfigurationRecordSelfTest::run()
 {
     return
         runRoundTripTest() &&
+        runLegacySchemaMigrationTest() &&
         runBadMagicRejectedTest() &&
-        runWrongSchemaRejectedTest() &&
+        runUnsupportedSchemaRejectedTest() &&
         runCorruptionRejectedTest() &&
         runInvalidValueRejectedTest() &&
         runWrongSizeRejectedTest();
