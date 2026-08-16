@@ -1,9 +1,7 @@
 #include "firmware_version_self_test.h"
-
 #include <string.h>
 #include "bridge_identity.h"
 #include "firmware_version.h"
-
 
 namespace
 {
@@ -27,7 +25,7 @@ namespace
         if (
             strcmp(
                 FirmwareVersion::PRERELEASE,
-                "rc1"
+                ""
             ) != 0
         )
         {
@@ -37,7 +35,7 @@ namespace
         if (
             strcmp(
                 FirmwareVersion::STRING,
-                "1.0.0-rc1"
+                "1.0.0"
             ) != 0
         )
         {
@@ -46,7 +44,6 @@ namespace
 
         return true;
     }
-
 
     bool runPackedIdTest()
     {
@@ -71,7 +68,6 @@ namespace
         return true;
     }
 }
-
 
 bool FirmwareVersionSelfTest::run()
 {

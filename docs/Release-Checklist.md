@@ -1,25 +1,25 @@
-# v1.0 Release-Candidate Checklist
+# v1.0.0 Final Release Checklist
 
-**Candidate:** `1.0.0-rc1`  
+**Candidate:** `1.0.0`  
 **Reference build environment:** `pico`  
-**Purpose:** Final regression and packaging gate before publishing a v1.0 release candidate.
+**Purpose:** Final regression and packaging gate before publishing stable v1.0.0.
 
-Use this checklist against the exact source commit that will be tagged. If runtime code, dependency pins, HID descriptors, CRSF protocol behavior, or release identity changes after testing begins, restart the checklist for the new candidate.
+Use this checklist against the exact source commit that will be tagged. If runtime code, dependency pins, HID descriptors, CRSF protocol behavior, or release identity changes after testing begins, restart the checklist for the new source commit.
 
 ---
-
 ## 1. Source / Documentation Preflight
-
-- [ ] Working tree contains the intended release-candidate source and documentation.
-- [ ] `src/firmware_version.h` reports `1.0.0-rc1`.
-- [ ] `FirmwareVersionSelfTest` expects `1.0.0-rc1` and CRSF ID `0x01000000`.
+- [ ] Working tree contains the intended final-release source and documentation.
+- [ ] `src/firmware_version.h` reports `1.0.0`.
+- [ ] `FirmwareVersion::PRERELEASE` is empty.
+- [ ] `FirmwareVersionSelfTest` expects `1.0.0` and CRSF ID `0x01000000`.
 - [ ] `LICENSE`, `AUTHORS.md`, and `THIRD_PARTY_NOTICES.md` are present.
-- [ ] `README.md`, `docs/Architecture.md`, `docs/Protocol.md`, `docs/Roadmap.md`, and `docs/Release.md` agree on current version/status.
+- [ ] `README.md`, `docs/Architecture.md`, `docs/Protocol.md`, `docs/Roadmap.md`, and `docs/Release.md` agree with the final v1.0 scope/status.
+- [ ] `CHANGELOG.md` contains the `1.0.0` entry.
+- [ ] `docs/Release-Notes-v1.0.0.md` is present.
 - [ ] `platformio.ini` still contains the known-good pinned framework/toolchain/NeoPixel versions.
 - [ ] No new v1.0 runtime feature was added outside the frozen scope.
 
 ---
-
 ## 2. Clean Build
 
 Use the normal VS Code PlatformIO controls and select the `pico` environment.
@@ -32,17 +32,15 @@ Use the normal VS Code PlatformIO controls and select the `pico` environment.
 Do not use the `pico_debug` artifact as the release binary.
 
 ---
-
 ## 3. Flash / Startup
 
-- [ ] Flash the candidate to the reference Adafruit QT Py RP2040.
+- [ ] Flash the final candidate to the reference Adafruit QT Py RP2040.
 - [ ] Device boots normally.
 - [ ] Startup self-tests pass (no fatal red state).
 - [ ] With transmitter unavailable, normal waiting/link-loss LED behavior is as documented.
 - [ ] With valid RC control restored, LED reaches solid normal green.
 
 ---
-
 ## 4. USB / Windows HID
 
 - [ ] Windows enumerates the HID device normally.
@@ -58,7 +56,6 @@ Reference v1.0 VID/PID remains:
 ```
 
 ---
-
 ## 5. Primary Axes
 
 In `joy.cpl` or equivalent HID test view:
@@ -78,7 +75,6 @@ Yaw       normal
 ```
 
 ---
-
 ## 6. AUX Analog Axes
 
 Reference mapping:
@@ -106,7 +102,6 @@ Reference ExpressLRS configuration:
 With the tested ExpressLRS 3.3.1 receiver firmware, CH15/CH16 may remain high.
 
 ---
-
 ## 7. Switch / Button Mapping
 
 Validate the documented reference EdgeTX layout:
@@ -122,7 +117,6 @@ Validate the documented reference EdgeTX layout:
 - [ ] No unexpected/stuck HID buttons are present.
 
 ---
-
 ## 8. Failsafe / Recovery
 
 Before transmitter-off testing, move at least one primary axis, CH13/CH14, and one switch away from their safe states.
@@ -149,9 +143,7 @@ Restore the transmitter.
 - [ ] No stale button/axis state remains after recovery.
 
 ---
-
 ## 9. BOOT / Diagnostic UI
-
 - [ ] Short BOOT press is acknowledged.
 - [ ] Link Quality diagnostic appears when Link Statistics are available.
 - [ ] Diagnostic-unavailable behavior is correct when link data is unavailable.
@@ -162,7 +154,6 @@ Restore the transmitter.
 - [ ] Maintenance display never masks a fatal startup error.
 
 ---
-
 ## 10. Bidirectional CRSF Discovery
 
 In the ExpressLRS Lua interface:
@@ -174,19 +165,17 @@ In the ExpressLRS Lua interface:
 - [ ] No unexpected CRSF parameter/configuration UI has appeared.
 
 ---
-
 ## 11. Simulator Regression
 
 Using Liftoff with the transmitter fully wireless:
 
 - [ ] Device remains recognized and usable.
-- [ ] Roll/pitch/yaw/throttle feel unchanged from the known-good build.
+- [ ] Roll/pitch/yaw/throttle feel unchanged from the known-good RC1 baseline.
 - [ ] No noticeable latency, stutter, or control degradation is introduced.
 - [ ] Arm/mode/reset controls mapped to HID buttons behave normally.
 - [ ] Extended session does not reveal disconnect/reconnect instability.
 
 ---
-
 ## 12. Wiring / Setup Documentation Validation
 
 Validate the README as though assembling/configuring the project from scratch.
@@ -210,19 +199,18 @@ RP2 RX  -> QT Py TX
 - [ ] Windows `joy.cpl` `Pico` naming quirk is documented as cosmetic.
 
 ---
-
 ## 13. Release Asset Staging
 
-After the exact candidate has passed the hardware regression:
+After the exact final candidate has passed the hardware regression:
 
 ```powershell
 .\tools\Stage-Release.ps1
 ```
 
-- [ ] `dist/ELRS-HID-Bridge-v1.0.0-rc1.uf2` is created.
-- [ ] `dist/ELRS-HID-Bridge-v1.0.0-rc1.sha256.txt` is created.
+- [ ] `dist/ELRS-HID-Bridge-v1.0.0.uf2` is created.
+- [ ] `dist/ELRS-HID-Bridge-v1.0.0.sha256.txt` is created.
 - [ ] `dist/RELEASE-MANIFEST.txt` is created.
-- [ ] Manifest version is `1.0.0-rc1`.
+- [ ] Manifest version is `1.0.0`.
 - [ ] Manifest Git commit matches the exact tested source commit (when Git is available).
 - [ ] SHA-256 file matches the staged UF2.
 - [ ] Staged UF2 is byte-for-byte copied from `.pio/build/pico/firmware.uf2`.
@@ -233,32 +221,25 @@ Optional but recommended final proof:
 - [ ] Confirm startup and a short HID/CRSF smoke test.
 
 ---
-
-## 14. RC Publication Gate
+## 14. Final Publication Gate
 
 Only after every release-blocking item above is complete:
 
-- [ ] Create tag `v1.0.0-rc1` pointing to the exact tested source commit.
-- [ ] Create GitHub Release `ELRS-HID-Bridge v1.0.0-rc1`.
-- [ ] Mark it as a pre-release.
-- [ ] Attach the staged UF2, SHA-256 file, and release manifest.
-- [ ] Use `CHANGELOG.md` / RC release notes for the release description.
-- [ ] Verify source archive contains GPL license/attribution files.
+- [ ] All final source/documentation changes are committed and synchronized.
+- [ ] Create tag `v1.0.0` pointing to the exact tested source commit.
+- [ ] Confirm the tag resolves to that exact commit.
+- [ ] Create GitHub Release `ELRS-HID-Bridge v1.0.0`.
+- [ ] Publish it as a normal release, not a pre-release.
+- [ ] Attach the final UF2, SHA-256 file, and release manifest.
+- [ ] Use `CHANGELOG.md` / `docs/Release-Notes-v1.0.0.md` for the release-description baseline.
+- [ ] Verify the source archive contains GPL license/attribution files.
 
 ---
+## 15. Post-Publication Verification
 
-## 15. Final v1.0.0 Gate
-
-Do not convert RC1 directly into final by renaming files.
-
-When RC validation is considered complete:
-
-- [ ] Change canonical firmware version to `1.0.0`.
-- [ ] Clear the prerelease label.
-- [ ] Update the version self-test.
-- [ ] Update `CHANGELOG.md` and release documentation.
-- [ ] Rebuild from the final source tree.
-- [ ] Repeat this full checklist.
-- [ ] Stage a new `ELRS-HID-Bridge-v1.0.0.uf2`.
-- [ ] Tag exact tested commit `v1.0.0`.
-- [ ] Publish the normal GitHub release.
+- [ ] GitHub shows `v1.0.0` as the current normal release.
+- [ ] Release tag and source commit match the exact tested final commit.
+- [ ] Attached UF2 filename is `ELRS-HID-Bridge-v1.0.0.uf2`.
+- [ ] Attached SHA-256 file verifies the published UF2.
+- [ ] Attached `RELEASE-MANIFEST.txt` identifies version `1.0.0` and the tested commit.
+- [ ] `v1.0.0-rc1` remains available as historical prerelease evidence.

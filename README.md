@@ -5,23 +5,20 @@ Convert an ExpressLRS/CRSF receiver into a standard USB HID joystick using an Ad
 ELRS-HID-Bridge is an open-source CRSF-to-USB HID bridge and development foundation. The reference application is a wireless FPV simulator joystick, but the firmware is intentionally structured so the CRSF, state, mapping, HID, diagnostics, and hardware layers can be reused by other projects.
 
 The reference build uses only two functional components:
-
 - Adafruit QT Py RP2040
 - RadioMaster RP2 ExpressLRS receiver
 
 No display, external pushbutton, custom PCB, custom USB driver, or mandatory companion application is required.
 
 ---
-
 ## Project Status
 
-**Current Version:** 1.0.0-rc1  
-**Status:** v1.0 release candidate validation
+**Current Version:** 1.0.0  
+**Status:** final v1.0 validation
 
-The core wireless joystick path is functional and has been validated in Liftoff. Runtime behavior is now frozen for the `1.0.0-rc1` validation cycle; remaining work is release regression, clean-reader documentation validation, and packaging of the tested UF2 artifact.
+The core wireless joystick path is functional and has been validated in Liftoff. Runtime behavior remains frozen from the validated `1.0.0-rc1` baseline. The final `1.0.0` source must be rebuilt and pass the complete release regression before the stable GitHub release is published.
 
 ### Proven on hardware
-
 - 420000-baud CRSF UART with a RadioMaster RP2
 - live CRSF frame reception
 - frame synchronization, length validation, and CRC validation
@@ -46,7 +43,6 @@ The core wireless joystick path is functional and has been validated in Liftoff.
 The identity-only bidirectional CRSF discovery path is hardware validated. A valid Device Ping (`0x28`) can produce the self-tested Parameter Device Information (`0x29`) response and send it through `CrsfUart::write()`.
 
 Validated behavior:
-
 - Device Info encoding is covered by deterministic startup self-tests.
 - Broadcast and directly addressed pings are eligible for a response.
 - Pings addressed to another CRSF device are ignored.
@@ -57,12 +53,11 @@ Validated behavior:
 - The discovery identity exposes zero CRSF parameters.
 - CRSF Serial/Hardware IDs are stable project-defined identifiers for the reference build.
 - CRSF Firmware ID is derived from the canonical firmware version in `firmware_version.h`.
-- `1.0.0-rc1` encodes as CRSF Firmware ID `0x01000000`. The `-rc1` prerelease label is intentionally not encoded in the numeric CRSF field.
+- `1.0.0` encodes as CRSF Firmware ID `0x01000000`; this is intentionally the same numeric ID used by `1.0.0-rc1` because prerelease labels are not encoded in the CRSF field.
 
-CRSF feature expansion is now frozen for the v1.0 cycle. The project is moving through release hardening rather than adding a parameter tree or other outbound protocol features.
+CRSF feature expansion is frozen for the v1.0 cycle. The project is completing final release validation rather than adding a parameter tree or other outbound protocol features.
 
 ---
-
 ## Design Goals
 
 - Open source
@@ -78,7 +73,6 @@ CRSF feature expansion is now frozen for the v1.0 cycle. The project is moving t
 Optional functionality must not interfere with the RC-to-HID critical path.
 
 ---
-
 ## Current HID Profile
 
 | HID control | Reference source |
@@ -105,7 +99,6 @@ Yaw      normal
 The HID descriptor supports 32 buttons. The current reference EdgeTX switch layout uses Buttons 1-14.
 
 ---
-
 ## Reference EdgeTX Channel Layout
 
 ```text
@@ -170,7 +163,6 @@ CH12 / SH:
 ```
 
 ---
-
 ## ExpressLRS Packet/Channel Mode
 
 Initial testing at 250 Hz Wide was adequate for sticks and switches but did not provide the intended proportional behavior for all auxiliary analog channels.
@@ -191,7 +183,6 @@ With the tested ExpressLRS 3.3.1 receiver firmware:
 Diagnostic remapping showed that the CH15/CH16 behavior follows the CRSF channels rather than the HID destinations. The bridge therefore retains the intended CH15->Ry and CH16->Rz mapping and does not implement an HID-side workaround for upstream channel behavior.
 
 ---
-
 ## Failsafe
 
 RC health is based on valid RC Channels frames, not on generic CRSF traffic or Link Statistics.
@@ -233,7 +224,6 @@ Therefore Link Statistics must never independently restore healthy RC state.
 When valid RC frames return, live HID control resumes automatically without rebooting the bridge.
 
 ---
-
 ## Status LED
 
 Conceptual normal states:
@@ -254,7 +244,6 @@ Pure green has a reserved meaning:
 The short-press Link Quality diagnostic uses a visibly different green/lime presentation so a successful button action is distinguishable from the normal healthy state.
 
 ---
-
 ## BOOT Button
 
 The QT Py onboard BOOT button is used as a local diagnostic/maintenance interface so the reference hardware remains a two-component design.
@@ -283,7 +272,6 @@ continue holding
 The maintenance UI and LED-selection behavior are implemented, but receiver Bind and Wi-Fi commands are still reserved and do not currently send receiver commands.
 
 ---
-
 ## Firmware Architecture
 
 The current receive path is intentionally layered:
@@ -328,7 +316,6 @@ ExpressLRS receiver
 ```
 
 Supporting application boundaries include:
-
 - `BridgeState` for operational facts and RC timeout state
 - `BridgeConfiguration` for canonical runtime configuration/defaults
 - `FailsafePolicy` for deterministic safe HID state
@@ -339,12 +326,11 @@ Supporting application boundaries include:
 - `CrsfFrameEncoder` for outbound extended-frame construction
 - `CrsfDevice` for CRSF device-level traffic
 
-`CrsfUart` provides both RX and TX primitives. The production loop now uses TX only for the controlled Device Ping -> Device Info discovery experiment.
+`CrsfUart` provides both RX and TX primitives. The production loop uses TX only for the controlled Device Ping -> Device Info discovery response.
 
 See `docs/Architecture.md` for the detailed boundaries and design rules.
 
 ---
-
 ## Hardware
 
 ### Reference MCU
@@ -373,7 +359,6 @@ CRSF UART:
 The RX/TX connection is intentionally bidirectional to support future CRSF device/configuration traffic without a hardware redesign.
 
 ---
-
 ## Building and Flashing
 
 The project uses:
@@ -402,16 +387,16 @@ The project intentionally prefers the normal VS Code/PlatformIO workflow for rou
 
 ### Release UF2
 
-After a successful normal `pico` build, PlatformIO produces the release-candidate UF2 at:
+After a successful normal `pico` build, PlatformIO produces the release UF2 at:
 
 ```text
 .pio/build/pico/firmware.uf2
 ```
 
-For a published release, use the versioned UF2 attached to the corresponding GitHub Release, for example:
+For the final v1.0.0 release, the staged/published artifact is:
 
 ```text
-ELRS-HID-Bridge-v1.0.0-rc1.uf2
+ELRS-HID-Bridge-v1.0.0.uf2
 ```
 
 For manual flashing, use the QT Py RP2040's normal BOOTSEL/UF2 procedure. When the RP2040 mass-storage boot device appears, copy the UF2 onto it.
@@ -422,14 +407,12 @@ Release maintainers can stage the already-built UF2, SHA-256 checksum, and relea
 .\tools\Stage-Release.ps1
 ```
 
-Release/version policy is documented in `docs/Release.md`; the complete release-candidate hardware regression is in `docs/Release-Checklist.md`.
+Release/version policy is documented in `docs/Release.md`; the complete final hardware regression is in `docs/Release-Checklist.md`.
 
 ---
-
 ## Validation
 
 For control-path changes, validate at least:
-
 - clean build with no VS Code Problems
 - expected USB HID enumeration
 - Roll direction/range
@@ -456,13 +439,11 @@ For parser/CRSF changes, also validate:
 - no UART activity starvation of HID reporting
 
 ---
-
 ## Current CRSF Device Discovery Work
 
 The first bidirectional CRSF feature remains intentionally small.
 
 Implemented:
-
 - Device Ping frame type (`0x28`) recognition
 - Device Info frame type (`0x29`) definition
 - extended-frame encoder
@@ -484,18 +465,17 @@ Not implemented yet:
 - CRSF parameter tree
 - persistent configuration
 
-Identity-only discovery has succeeded cleanly. Version/identity metadata is now centralized for release hardening. Full transmitter-side configuration remains post-v1.0 work. Runtime behavior is frozen for the release-candidate cycle; the remaining work is clean-build validation, documentation verification, release-binary staging, and final regression.
+Identity-only discovery has succeeded cleanly. Version/identity metadata is centralized for release hardening. Full transmitter-side configuration remains post-v1.0 work. Runtime behavior is frozen while the final `1.0.0` source is rebuilt and regression-tested.
 
 ---
-
 ## Firmware Versioning
 
 `src/firmware_version.h` is the canonical firmware version source.
 
-Current release-candidate version:
+Current final-release version:
 
 ```text
-1.0.0-rc1
+1.0.0
 ```
 
 The CRSF Device Info `Firmware_ID` is derived from the same constants using:
@@ -507,14 +487,13 @@ bits 15..8   patch
 bits 7..0    reserved (0)
 ```
 
-For `1.0.0-rc1`, the numeric CRSF Firmware ID is `0x01000000`. The human-readable `-rc1` prerelease label is intentionally not encoded into that CRSF field, so the final `1.0.0` release will use the same numeric CRSF Firmware ID.
+For `1.0.0`, the numeric CRSF Firmware ID is `0x01000000`. The RC1 prerelease label was intentionally not encoded into this field, so `1.0.0-rc1` and final `1.0.0` share the same numeric CRSF Firmware ID.
 
 A startup self-test verifies that the version string/tuple and the CRSF identity remain synchronized.
 
-Version tags and final release-number transition policy are tracked in `docs/Release.md`.
+Version tags and release policy are tracked in `docs/Release.md`.
 
 ---
-
 ## Repository Layout
 
 ```text
@@ -528,6 +507,7 @@ docs/
     Protocol.md
     Release.md
     Release-Checklist.md
+    Release-Notes-v1.0.0.md
     Release-Notes-v1.0.0-rc1.md
     Roadmap.md
     USB-Identity.md
@@ -541,13 +521,11 @@ src/
 ```
 
 ---
-
 ## Why Another Simulator Dongle?
 
 The basic receiver->microcontroller->USB joystick concept has prior art and demonstrated community value. ELRS-HID-Bridge does not need to claim invention of that concept.
 
 The project aims to differentiate through:
-
 - deterministic receiver-loss handling
 - robust and explicit CRSF processing
 - clean transport/protocol/state/HID separation
@@ -559,7 +537,6 @@ The project aims to differentiate through:
 Features are not added solely for differentiation.
 
 ---
-
 ## Project Boundary
 
 The upstream project identity is:
@@ -569,7 +546,6 @@ The upstream project identity is:
 Application-specific ideas such as OBS integration, race-station control, pilot-input logging, or specialized displays are better implemented as optional extensions or forks unless they strengthen the reusable core.
 
 ---
-
 ## Contributing
 
 The project is under active development.
@@ -579,13 +555,11 @@ Ideas, bug reports, testing, documentation improvements, and pull requests are w
 Changes should preserve the critical RC-to-HID path and favor small regression-testable commits over broad rewrites.
 
 ---
-
 ## Roadmap
 
 See `docs/Roadmap.md`.
 
 ---
-
 ## License
 
 ELRS-HID-Bridge is licensed under the **GNU General Public License v3.0 only (`GPL-3.0-only`)**.
@@ -593,7 +567,6 @@ ELRS-HID-Bridge is licensed under the **GNU General Public License v3.0 only (`G
 Distributed derivative firmware remains covered by the GPL terms. See `LICENSE`, `AUTHORS.md`, and `THIRD_PARTY_NOTICES.md` for the project license, attribution, and third-party dependency notices.
 
 ---
-
 ## Acknowledgements
 
 This project builds on the work of:
@@ -605,7 +578,6 @@ This project builds on the work of:
 - TinyUSB
 
 Relevant prior-art projects should be acknowledged where appropriate as the public release documentation is finalized.
-
 
 ## Reproducible v1.0 Build Baseline
 
