@@ -1,5 +1,6 @@
 #pragma once
 
+#include "crsf_device.h"
 #include "crsf_frame.h"
 #include "link_statistics.h"
 #include "link_statistics_decoder.h"
@@ -14,14 +15,10 @@ public:
 
 
     // Route a previously validated CRSF frame to the appropriate
-    // frame-type decoder.
+    // frame-type consumer.
     //
-    // CrsfDispatcher does not perform framing, synchronization,
-    // length validation, or CRC validation. Those responsibilities
-    // belong to CrsfParser.
-    //
-    // Unsupported but otherwise valid CRSF frame types are
-    // intentionally ignored.
+    // Unsupported but otherwise valid frame types are intentionally
+    // ignored.
     void dispatch(
         const CrsfFrame& frame
     );
@@ -55,6 +52,20 @@ public:
     void clearNewLinkStatistics();
 
 
+    // -------------------------------------------------------------------------
+    // CRSF device traffic
+    // -------------------------------------------------------------------------
+
+    bool hasDevicePing() const;
+
+
+    const CrsfDevicePing&
+    getDevicePing() const;
+
+
+    void clearDevicePing();
+
+
 private:
     bool newChannels = false;
 
@@ -69,4 +80,6 @@ private:
     RcChannelDecoder rcChannelDecoder;
 
     LinkStatisticsDecoder linkStatisticsDecoder;
+
+    CrsfDevice crsfDevice;
 };

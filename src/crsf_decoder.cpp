@@ -23,11 +23,10 @@ void CrsfDecoder::pushByte(
         )
     )
     {
-        // CrsfFrame contains a transient view into CrsfParser's
+        // CrsfFrame contains a transient view into the parser's
         // internal receive buffer.
         //
-        // Dispatch therefore remains synchronous: the frame is
-        // consumed before another byte is supplied to the parser.
+        // Dispatch therefore remains synchronous.
 
         dispatcher.dispatch(
             frame
@@ -75,4 +74,25 @@ CrsfDecoder::getLinkStatistics() const
 void CrsfDecoder::clearNewLinkStatistics()
 {
     dispatcher.clearNewLinkStatistics();
+}
+
+
+bool CrsfDecoder::hasDevicePing() const
+{
+    return
+        dispatcher.hasDevicePing();
+}
+
+
+const CrsfDevicePing&
+CrsfDecoder::getDevicePing() const
+{
+    return
+        dispatcher.getDevicePing();
+}
+
+
+void CrsfDecoder::clearDevicePing()
+{
+    dispatcher.clearDevicePing();
 }

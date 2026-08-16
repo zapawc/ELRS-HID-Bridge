@@ -7,6 +7,7 @@
 #include "channel_normalizer.h"
 #include "channel_state.h"
 #include "crsf_decoder.h"
+#include "crsf_device_self_test.h"
 #include "crsf_frame_encoder_self_test.h"
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
@@ -20,7 +21,9 @@
 
 
 RawChannels rawChannels;
+
 NormalizedChannels normalizedChannels;
+
 ChannelState channelState;
 
 
@@ -56,10 +59,13 @@ StatusDisplay statusDisplay(
 
 BootButton bootButton;
 
+
 MaintenanceController maintenanceController;
 
 
 CrsfUart crsfUart;
+
+
 CrsfDecoder crsfDecoder;
 
 
@@ -73,10 +79,12 @@ void setup()
 {
     statusLed.begin();
 
+
     statusDisplay.reset();
 
 
     bootButton.begin();
+
 
     maintenanceController.reset();
 
@@ -90,15 +98,19 @@ void setup()
     // -------------------------------------------------------------------------
     // Startup CRSF tests
     //
-    // Both receive parsing/decoding and outbound frame construction are
-    // validated before the live CRSF UART is started.
+    // Validate:
     //
-    // The encoder test does not transmit anything.
+    // - receive parsing/decoding
+    // - outbound extended-frame construction
+    // - Device Ping recognition
+    //
+    // None of these startup tests transmit on the live CRSF UART.
     // -------------------------------------------------------------------------
 
     startupSelfTestsPassed =
         CrsfSelfTest::run() &&
-        CrsfFrameEncoderSelfTest::run();
+        CrsfFrameEncoderSelfTest::run() &&
+        CrsfDeviceSelfTest::run();
 
 
     if (!startupSelfTestsPassed)
@@ -346,6 +358,23 @@ void loop()
 
 
         crsfDecoder.clearNewLinkStatistics();
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Device Ping
+    //
+    // Recognition is implemented and covered by startup tests.
+    //
+    // Live requests are deliberately consumed without generating
+    // a response during this checkpoint.
+    // -------------------------------------------------------------------------
+
+    if (
+        crsfDecoder.hasDevicePing()
+    )
+    {
+        crsfDecoder.clearDevicePing();
     }
 
 

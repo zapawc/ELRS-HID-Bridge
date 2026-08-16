@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "crsf_device.h"
 #include "crsf_dispatcher.h"
 #include "crsf_parser.h"
 #include "link_statistics.h"
@@ -14,14 +15,10 @@ public:
     void reset();
 
 
-    // Compatibility facade for the existing CRSF receive path.
+    // Compatibility facade for the CRSF receive path.
     //
-    // Bytes are passed to CrsfParser. Complete, validated frames
-    // are synchronously passed to CrsfDispatcher.
-    //
-    // This preserves the public CrsfDecoder interface used by the
-    // rest of the firmware while separating parsing from frame-type
-    // interpretation.
+    // Bytes are passed to CrsfParser. Complete validated frames
+    // are synchronously routed through CrsfDispatcher.
     void pushByte(
         uint8_t byte
     );
@@ -53,6 +50,20 @@ public:
 
 
     void clearNewLinkStatistics();
+
+
+    // -------------------------------------------------------------------------
+    // CRSF device traffic
+    // -------------------------------------------------------------------------
+
+    bool hasDevicePing() const;
+
+
+    const CrsfDevicePing&
+    getDevicePing() const;
+
+
+    void clearDevicePing();
 
 
 private:

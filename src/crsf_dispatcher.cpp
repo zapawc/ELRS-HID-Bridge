@@ -8,6 +8,9 @@ void CrsfDispatcher::reset()
     newChannels = false;
 
     newLinkStatistics = false;
+
+
+    crsfDevice.reset();
 }
 
 
@@ -51,14 +54,24 @@ void CrsfDispatcher::dispatch(
         }
 
 
+        case Crsf::FRAME_DEVICE_PING:
+        {
+            crsfDevice.handleDevicePing(
+                frame
+            );
+
+
+            break;
+        }
+
+
         default:
         {
             // Unsupported frame types are intentionally ignored.
             //
-            // CrsfParser has already established that this is a
-            // structurally valid CRSF frame. Understanding the
-            // frame type is a dispatch concern rather than a
-            // parsing failure.
+            // CrsfParser has already established that the frame is
+            // structurally valid. Understanding its semantic meaning
+            // is a dispatcher/device concern.
 
             break;
         }
@@ -105,4 +118,25 @@ CrsfDispatcher::getLinkStatistics() const
 void CrsfDispatcher::clearNewLinkStatistics()
 {
     newLinkStatistics = false;
+}
+
+
+bool CrsfDispatcher::hasDevicePing() const
+{
+    return
+        crsfDevice.hasDevicePing();
+}
+
+
+const CrsfDevicePing&
+CrsfDispatcher::getDevicePing() const
+{
+    return
+        crsfDevice.devicePing();
+}
+
+
+void CrsfDispatcher::clearDevicePing()
+{
+    crsfDevice.clearDevicePing();
 }
