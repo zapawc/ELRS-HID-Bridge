@@ -494,8 +494,9 @@ void loop()
     // -------------------------------------------------------------------------
     // CRSF parameter writes
     //
-    // BridgeParameters validates and stages BridgeConfiguration changes.
-    // A successful write is acknowledged only after durable storage succeeds.
+    // BridgeParameters owns simple values plus the Restore Defaults command
+    // lifecycle. Responses requiring durable state are transmitted only after
+    // persistence succeeds.
     // -------------------------------------------------------------------------
 
     if (
@@ -535,12 +536,30 @@ void loop()
                 )
         )
         {
+            bool persistenceSucceeded =
+                true;
+
+
             if (
-                bridgeConfigurationStore
-                    .save(
-                        bridgeConfiguration
-                    )
+                result.requiresPersistence
             )
+            {
+                persistenceSucceeded =
+                    bridgeConfigurationStore
+                        .save(
+                            bridgeConfiguration
+                        );
+            }
+
+
+            bridgeParameters
+                .finalizePersistence(
+                    result,
+                    persistenceSucceeded
+                );
+
+
+            if (persistenceSucceeded)
             {
                 switch (
                     result.change
@@ -570,6 +589,22 @@ void loop()
                     }
 
 
+                    case BridgeParameterChange::
+                        RestoreDefaults:
+                    {
+                        // Restore every application-side setting that has an
+                        // immediate presentation effect. ChannelMapper already
+                        // references BridgeConfiguration for pitch inversion.
+                        statusLed
+                            .setBrightnessPercent(
+                                result
+                                    .ledBrightnessPercent
+                            );
+
+                        break;
+                    }
+
+
                     case BridgeParameterChange::None:
                     {
                         break;
@@ -577,9 +612,10 @@ void loop()
                 }
 
 
-                // Acknowledge only after persistence succeeds. This makes a
-                // successful CRSF write mean both runtime acceptance and
-                // durable storage.
+                // Simple parameter writes use 0x2D acknowledgements.
+                // COMMAND writes use stateful 0x2B responses. In either case
+                // the response prepared by BridgeParameters is transmitted
+                // only when any required persistence has succeeded.
                 crsfUart.write(
                     response,
                     responseLength
@@ -587,9 +623,9 @@ void loop()
             }
             else
             {
-                // Do not expose a runtime-only value when this checkpoint's
-                // contract is persistence. ChannelMapper continues to reference
-                // the same BridgeConfiguration object after assignment.
+                // Restore the entire configuration snapshot if durable storage
+                // failed. For Restore Defaults, BridgeParameters intentionally
+                // leaves the confirmation pending so EdgeTX can poll/retry.
                 bridgeConfiguration =
                     previousConfiguration;
             }

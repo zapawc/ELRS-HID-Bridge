@@ -14,6 +14,39 @@ BridgeParameters::BridgeParameters(
 }
 
 
+bool BridgeParameters::buildRestoreDefaultsResponse(
+    uint8_t destination,
+    uint8_t origin,
+    uint8_t localAddress,
+    uint8_t status,
+    const char* info,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    CrsfDevice responseBuilder;
+
+
+    return
+        responseBuilder
+            .buildCommandParameterResponse(
+                destination,
+                origin,
+                localAddress,
+                RESTORE_DEFAULTS_PARAMETER,
+                ROOT_PARAMETER,
+                "Restore Defaults",
+                status,
+                RESTORE_DEFAULTS_TIMEOUT,
+                info,
+                output,
+                outputCapacity,
+                outputLength
+            );
+}
+
+
 bool BridgeParameters::buildReadResponse(
     const CrsfParameterRead& request,
     uint8_t localAddress,
@@ -37,7 +70,8 @@ bool BridgeParameters::buildReadResponse(
             constexpr uint8_t children[] =
             {
                 LED_BRIGHTNESS_PARAMETER,
-                PITCH_INVERSION_PARAMETER
+                PITCH_INVERSION_PARAMETER,
+                RESTORE_DEFAULTS_PARAMETER
             };
 
 
@@ -79,9 +113,6 @@ bool BridgeParameters::buildReadResponse(
                         // ExpressLRS elrs.lua r18 directly appends the
                         // unit to a Lua string.format pattern. A literal
                         // "%" therefore causes a formatter exception.
-                        //
-                        // Keep the CRSF FLOAT parameter standards-based
-                        // while leaving the presentation unit blank.
                         "",
                         output,
                         outputCapacity,
@@ -116,6 +147,34 @@ bool BridgeParameters::buildReadResponse(
                         outputCapacity,
                         outputLength
                     );
+        }
+
+
+        case RESTORE_DEFAULTS_PARAMETER:
+        {
+            if (
+                request.chunkNumber != 0
+            )
+            {
+                return false;
+            }
+
+
+            return
+                buildRestoreDefaultsResponse(
+                    request.destination,
+                    request.origin,
+                    localAddress,
+                    restoreDefaultsConfirmationPending
+                        ? COMMAND_CONFIRMATION_NEEDED
+                        : COMMAND_READY,
+                    restoreDefaultsConfirmationPending
+                        ? "Restore defaults?"
+                        : "",
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
         }
 
 
@@ -218,6 +277,9 @@ bool BridgeParameters::handleWrite(
                 configuration
                     .ledBrightnessPercent;
 
+            result.requiresPersistence =
+                true;
+
 
             return true;
         }
@@ -278,8 +340,151 @@ bool BridgeParameters::handleWrite(
             result.pitchInverted =
                 configuration.pitch.inverted;
 
+            result.requiresPersistence =
+                true;
+
 
             return true;
+        }
+
+
+        case RESTORE_DEFAULTS_PARAMETER:
+        {
+            if (
+                request.dataLength != 1
+            )
+            {
+                return false;
+            }
+
+
+            const uint8_t command =
+                request.data[0];
+
+
+            switch (command)
+            {
+                case COMMAND_START:
+                {
+                    restoreDefaultsConfirmationPending =
+                        true;
+
+
+                    return
+                        buildRestoreDefaultsResponse(
+                            request.destination,
+                            request.origin,
+                            localAddress,
+                            COMMAND_CONFIRMATION_NEEDED,
+                            "Restore defaults?",
+                            output,
+                            outputCapacity,
+                            outputLength
+                        );
+                }
+
+
+                case COMMAND_CONFIRM:
+                {
+                    if (
+                        !restoreDefaultsConfirmationPending
+                    )
+                    {
+                        return
+                            buildRestoreDefaultsResponse(
+                                request.destination,
+                                request.origin,
+                                localAddress,
+                                COMMAND_READY,
+                                "No pending request",
+                                output,
+                                outputCapacity,
+                                outputLength
+                            );
+                    }
+
+
+                    configuration =
+                        BridgeConfiguration::defaults();
+
+
+                    result.change =
+                        BridgeParameterChange::
+                            RestoreDefaults;
+
+                    result.ledBrightnessPercent =
+                        configuration
+                            .ledBrightnessPercent;
+
+                    result.pitchInverted =
+                        configuration.pitch.inverted;
+
+                    result.requiresPersistence =
+                        true;
+
+
+                    // The response is constructed now but main.cpp does not
+                    // transmit it until the default configuration has been
+                    // committed successfully.
+                    return
+                        buildRestoreDefaultsResponse(
+                            request.destination,
+                            request.origin,
+                            localAddress,
+                            COMMAND_READY,
+                            "Defaults restored",
+                            output,
+                            outputCapacity,
+                            outputLength
+                        );
+                }
+
+
+                case COMMAND_CANCEL:
+                {
+                    restoreDefaultsConfirmationPending =
+                        false;
+
+
+                    return
+                        buildRestoreDefaultsResponse(
+                            request.destination,
+                            request.origin,
+                            localAddress,
+                            COMMAND_READY,
+                            "Cancelled",
+                            output,
+                            outputCapacity,
+                            outputLength
+                        );
+                }
+
+
+                case COMMAND_POLL:
+                {
+                    return
+                        buildRestoreDefaultsResponse(
+                            request.destination,
+                            request.origin,
+                            localAddress,
+                            restoreDefaultsConfirmationPending
+                                ? COMMAND_CONFIRMATION_NEEDED
+                                : COMMAND_READY,
+                            restoreDefaultsConfirmationPending
+                                ? "Restore defaults?"
+                                : "",
+                            output,
+                            outputCapacity,
+                            outputLength
+                        );
+                }
+
+
+                default:
+                {
+                    return false;
+                }
+            }
         }
 
 
@@ -287,5 +492,23 @@ bool BridgeParameters::handleWrite(
         {
             return false;
         }
+    }
+}
+
+
+void BridgeParameters::finalizePersistence(
+    const BridgeParameterWriteResult& result,
+    bool succeeded
+)
+{
+    if (
+        result.change ==
+            BridgeParameterChange::
+                RestoreDefaults &&
+        succeeded
+    )
+    {
+        restoreDefaultsConfirmationPending =
+            false;
     }
 }

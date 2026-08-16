@@ -996,6 +996,116 @@ bool CrsfDevice::buildTextSelectionParameterResponse(
 }
 
 
+bool CrsfDevice::buildCommandParameterResponse(
+    uint8_t destination,
+    uint8_t origin,
+    uint8_t localAddress,
+    uint8_t parameterNumber,
+    uint8_t parentFolder,
+    const char* name,
+    uint8_t status,
+    uint8_t timeout,
+    const char* info,
+    uint8_t* output,
+    size_t outputCapacity,
+    size_t& outputLength
+) const
+{
+    outputLength = 0;
+
+
+    if (
+        !requestIsForLocalDevice(
+            destination,
+            origin,
+            localAddress
+        )
+    )
+    {
+        return false;
+    }
+
+
+    uint8_t payload[
+        MAX_EXTENDED_PAYLOAD_SIZE
+    ] = {};
+
+    size_t payloadIndex = 0;
+
+
+    payload[payloadIndex++] =
+        parameterNumber;
+
+    // Entire command definition fits into one CRSF frame.
+    payload[payloadIndex++] = 0;
+
+    payload[payloadIndex++] =
+        parentFolder;
+
+    payload[payloadIndex++] =
+        Crsf::PARAMETER_TYPE_COMMAND;
+
+
+    if (
+        !appendString(
+            name,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    if (
+        payloadIndex + 2 >
+        sizeof(payload)
+    )
+    {
+        return false;
+    }
+
+
+    payload[payloadIndex++] =
+        status;
+
+    payload[payloadIndex++] =
+        timeout;
+
+
+    if (
+        !appendString(
+            info,
+            payload,
+            sizeof(payload),
+            payloadIndex
+        )
+    )
+    {
+        return false;
+    }
+
+
+    CrsfFrameEncoder encoder;
+
+
+    return
+        encoder.encodeExtended(
+            Crsf::SYNC_BYTE,
+            Crsf::FRAME_PARAMETER_SETTINGS_ENTRY,
+            origin,
+            localAddress,
+            payload,
+            payloadIndex,
+            output,
+            outputCapacity,
+            outputLength
+        );
+}
+
+
 bool CrsfDevice::buildFloatWriteResponse(
     const CrsfParameterWrite& request,
     uint8_t localAddress,

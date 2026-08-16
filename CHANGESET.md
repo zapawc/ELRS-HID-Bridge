@@ -1,160 +1,169 @@
-# ELRS-HID-Bridge — Post-v1.0 Checkpoint 5
+# ELRS-HID-Bridge — Post-v1.0 Checkpoint 6
 
 ## Intent
 
-## Compatibility correction
+Complete the first configuration lifecycle with a controlled transmitter-side
+factory reset:
 
-The first Checkpoint 5 package incorrectly targeted Mbed KVStore. The actual
-PlatformIO build uses `framework-arduinopico`, so this revision replaces only
-the persistence transport with the Arduino-Pico `EEPROM` API. The record schema,
-CRC validation, boot fallback, parameter behavior, and transactional
-acknowledgement logic are unchanged.
+**Restore Defaults**
 
-Add persistent storage for the two CRSF-configurable settings already proven on
-hardware:
+This checkpoint adds one CRSF `COMMAND` parameter and does not add any new
+mapping/value setting.
 
-- LED Brightness
-- Pitch Inversion
+## Existing configuration lifecycle
 
-This checkpoint does not add any new user-facing parameter.
+Before this checkpoint the bridge already supports:
 
-## Storage architecture
+- LED Brightness — CRSF FLOAT
+- Pitch Inversion — CRSF TEXT_SELECTION
+- persistent storage in Arduino-Pico EEPROM emulation
+- versioned/CRC-protected configuration record
+- safe boot fallback
 
-Persistence is deliberately split into two layers.
+Checkpoint 6 adds the recovery path:
 
-### BridgeConfigurationRecord
+configure → persist → restore known-good defaults
 
-Pure serialization/validation logic.
+## Parameter list
 
-It owns:
+- Parameter 0 — ROOT
+- Parameter 1 — LED Brightness
+- Parameter 2 — Pitch Inversion
+- Parameter 3 — Restore Defaults
 
-- record magic,
-- schema version,
-- payload length,
-- persisted-field encoding,
-- CRC-32 generation/validation,
-- range validation,
-- safe decode behavior.
+Device Info parameter count becomes 3 automatically because
+`BridgeIdentity::CRSF_PARAMETER_COUNT` derives from
+`BridgeParameters::PARAMETER_COUNT`.
 
-It has no flash or CRSF dependency.
+## CRSF COMMAND behavior
 
-### BridgeConfigurationStore
+Restore Defaults uses standard CRSF `COMMAND` (`0x0D`) state semantics.
 
-Storage transport only.
+States used:
 
-The project's actual PlatformIO toolchain uses Earle Philhower's Arduino-Pico
-core (`framework-arduinopico`), not ArduinoCore-mbed.
+- `0` READY
+- `1` START
+- `3` CONFIRMATION_NEEDED
+- `4` CONFIRM
+- `5` CANCEL
+- `6` POLL
 
-Persistence therefore uses the Arduino-Pico `EEPROM` emulation API. The core
-reserves one 4 KiB flash sector at the end of RP2040 flash for EEPROM emulation.
-The bridge stores its 16-byte record beginning at EEPROM offset 0.
+The command definition is returned as a Parameter Settings Entry (`0x2B`).
 
-`EEPROM.begin(256)` uses the smallest supported working buffer. The core only
-marks the buffer dirty when a byte actually changes, so committing an unchanged
-record does not erase/program flash.
+A COMMAND write is also answered with an updated `0x2B` command entry rather
+than a simple value-only `0x2D` acknowledgement.
 
-## Record schema v1
+## EdgeTX / ExpressLRS Lua r18 flow
 
-Fixed length: 16 bytes
+The uploaded Lua r18 script:
 
-Layout:
+1. sends START when Restore Defaults is selected,
+2. opens a confirmation popup when status 3 is returned,
+3. sends CONFIRM when the user approves,
+4. sends CANCEL when the user cancels,
+5. can send POLL to refresh command state.
 
-- bytes 0–3: magic `EHB1`
-- byte 4: schema version = 1
-- byte 5: payload length = 2
-- byte 6: LED brightness, 0–100
-- byte 7: pitch inversion
-  - 0 = Normal
-  - 1 = Inverted
-- bytes 8–11: reserved, zero
-- bytes 12–15: CRC-32 over bytes 0–11
+The firmware follows this exact lifecycle.
 
-Only the two real configurable settings are persisted.
+## Safety behavior
 
-All other BridgeConfiguration fields continue to come from
+Selecting Restore Defaults does **not** immediately modify configuration.
+
+Flow:
+
+START
+  → bridge marks confirmation pending
+  → bridge returns CONFIRMATION_NEEDED
+  → user sees confirmation dialog
+
+If user cancels:
+
+CANCEL
+  → no configuration change
+  → no flash write
+  → READY / Cancelled
+
+If user confirms:
+
+CONFIRM
+  → BridgeConfiguration::defaults() is staged
+  → default record is written to EEPROM
+  → only if persistence succeeds:
+       - LED brightness default is applied immediately
+       - pitch default is already visible through BridgeConfiguration
+       - command becomes READY
+       - READY / Defaults restored response is sent
+
+If persistence fails:
+
+- pre-command configuration is restored,
+- no success response is transmitted,
+- confirmation remains pending for host retry/poll.
+
+## Restored defaults
+
+Current known-good defaults remain:
+
+- LED Brightness = 10
+- Pitch Inversion = Inverted
+
+No other configuration fields are changed away from
 `BridgeConfiguration::defaults()`.
-
-## Boot behavior
-
-The global configuration object is still initialized from known-good defaults.
-
-During `setup()`:
-
-1. the bridge attempts to load the KVStore record,
-2. the record must pass exact-size, magic, schema, payload, value-range, and
-   CRC validation,
-3. only then are the persistent fields accepted,
-4. otherwise defaults remain untouched.
-
-The load occurs before `StatusLed::begin()`, so a stored brightness is applied
-from the first normal LED state.
-
-## Write behavior
-
-CRSF parameter writes are now transactional from the bridge's perspective.
-
-1. Save a copy of the previous BridgeConfiguration.
-2. `BridgeParameters` validates and stages the requested change.
-3. The complete configuration record is written through Arduino-Pico EEPROM
-   emulation and committed to flash.
-4. Only if persistence succeeds:
-   - the application-side effect is applied,
-   - the CRSF `0x2D` acknowledgement is transmitted.
-5. If persistence fails:
-   - BridgeConfiguration is restored from the snapshot,
-   - no acknowledgement is sent,
-   - no new runtime value is exposed.
-
-This makes an acknowledged parameter write mean both runtime acceptance and
-durable storage.
-
-## Flash-write frequency
-
-The ExpressLRS Lua editor sends a parameter write when an edit is committed,
-not on every cursor increment. Storage writes therefore occur on explicit
-parameter changes, not continuously in the main loop.
-
-## Self-test coverage
-
-A new startup self-test exercises the record codec without touching live flash:
-
-- encode/decode round trip,
-- bad magic rejection,
-- schema mismatch rejection,
-- payload corruption / CRC rejection,
-- invalid value rejection,
-- wrong record-size rejection,
-- failed decode leaves the current configuration unchanged.
-
-The startup self-test does **not** erase, rewrite, or corrupt the real
-EEPROM-emulation flash sector.
-
-## Files added
-
-- `src/bridge_configuration_record.h`
-- `src/bridge_configuration_record.cpp`
-- `src/bridge_configuration_store.h`
-- `src/bridge_configuration_store.cpp`
-- `src/bridge_configuration_record_self_test.h`
-- `src/bridge_configuration_record_self_test.cpp`
 
 ## Files changed
 
+- `src/crsf_device.h`
+- `src/crsf_device.cpp`
+- `src/bridge_parameters.h`
+- `src/bridge_parameters.cpp`
+- `src/crsf_parameter_self_test.cpp`
 - `src/main.cpp`
+
+## Protocol abstraction
+
+`CrsfDevice` gains one generic protocol helper for CRSF COMMAND parameter
+entries.
+
+Bridge-specific command policy remains in `BridgeParameters`.
+
+No factory-reset knowledge is added to the CRSF parser, dispatcher, UART, or
+frame encoder.
+
+## Self-test coverage
+
+The CRSF parameter startup self-test now covers:
+
+- parameter count = 3,
+- root folder contains all three parameters,
+- existing FLOAT and TEXT_SELECTION entries still build,
+- Restore Defaults initially reports READY,
+- START returns CONFIRMATION_NEEDED,
+- START does not modify configuration,
+- POLL preserves pending confirmation,
+- CONFIRM stages known-good defaults,
+- CONFIRM requires persistence,
+- simulated persistence failure leaves confirmation pending,
+- simulated persistence success returns the command to READY,
+- CANCEL leaves configuration unchanged,
+- CONFIRM without a prior START cannot reset configuration.
+
+The test does not write live EEPROM.
 
 ## Intentionally unchanged
 
-- CRSF parameter definitions
-- LED Brightness range/type
-- ExpressLRS Lua r18 blank-unit workaround
-- Pitch Inversion options/default
+- LED Brightness representation/range
+- Lua r18 blank-unit workaround
+- Pitch Inversion representation/default
+- persistent record schema
+- EEPROM storage layout
+- HID descriptor
 - channel assignments
-- HID descriptors
-- failsafe policy
+- switch/button mappings
 - receiver timeout
+- failsafe policy
 - Link Statistics behavior
 - BOOT-button behavior
-- telemetry
+- Bind/Wi-Fi command execution
 - board portability
 - `pico_debug`
 - firmware semantic version
@@ -163,105 +172,107 @@ EEPROM-emulation flash sector.
 
 Use the established VS Code / PlatformIO workflow.
 
-1. Overlay this ZIP at the repository root.
+1. Overlay this ZIP at repository root.
 2. Build the normal `pico` environment.
-3. Confirm VS Code **Problems** is clear.
+3. Confirm VS Code Problems is clear.
 4. Flash the normal build.
 5. Do not use `pico_debug`.
 
 ## Hardware test procedure
 
-### First boot after Checkpoint 5 flash
+### Establish non-default persisted state
 
-Existing devices do not yet have a Checkpoint 5 configuration record in the
-Arduino-Pico EEPROM-emulation sector.
-
-Expected behavior:
-
-1. bridge boots normally,
-2. LED Brightness starts at 10,
-3. Pitch Inversion starts at Inverted,
-4. all HID behavior matches the prior validated checkpoint.
-
-An erased/uninitialized EEPROM record fails magic/CRC validation and is treated
-exactly like "no saved configuration yet."
-
-### Persist both settings
+Before testing Restore Defaults:
 
 1. Open ExpressLRS → Other Devices → ELRS-HID-Bridge.
-2. Change LED Brightness to a distinctive value such as 50.
-3. Change Pitch Inversion to Normal.
-4. Confirm both changes take effect immediately.
-5. Close/reopen the device page and confirm both current values are still shown.
+2. Set LED Brightness to 50.
+3. Set Pitch Inversion to Normal.
+4. Power-cycle the bridge.
+5. Confirm both values survived the reboot.
 
-### Power-cycle persistence
+This proves the reset has real persisted state to replace.
 
-1. Disconnect USB power from the bridge.
-2. Reconnect it.
-3. Re-establish the ELRS link.
+### Command discovery
+
+1. Reopen ELRS-HID-Bridge.
+2. Confirm these entries appear:
+   - LED Brightness
+   - Pitch Inversion
+   - Restore Defaults
+3. Confirm the device page opens without a Lua error.
+
+### Cancellation test
+
+1. Select Restore Defaults.
+2. A confirmation dialog should appear.
+3. Cancel/exit the confirmation.
+4. Confirm:
+   - LED Brightness remains 50,
+   - Pitch Inversion remains Normal,
+   - HID pitch direction remains Normal.
+5. Power-cycle and verify the same values remain persisted.
+
+No reset and no EEPROM update should occur from cancellation.
+
+### Confirmed Restore Defaults test
+
+1. Select Restore Defaults again.
+2. Confirm the action in the transmitter popup.
+3. Expected immediate result:
+   - LED brightness returns to 10,
+   - Pitch Inversion returns to Inverted,
+   - pitch direction changes accordingly in `joy.cpl`.
+4. Close/reopen the device page.
+5. Confirm both parameters show their defaults.
+
+### Persistence test
+
+1. Fully remove USB power.
+2. Reconnect the bridge.
+3. Re-establish ELRS.
 4. Reopen ELRS-HID-Bridge.
 5. Confirm:
-   - LED Brightness is still 50,
-   - Pitch Inversion is still Normal.
-6. Open `joy.cpl`.
-7. Confirm the Y-axis still reflects Normal pitch orientation.
+   - LED Brightness = 10,
+   - Pitch Inversion = Inverted.
+6. Confirm `joy.cpl` reflects the validated inverted pitch orientation.
 
-### Change persisted values again
+### General regression
 
-1. Set LED Brightness to another value such as 25.
-2. Set Pitch Inversion back to Inverted.
-3. Power-cycle again.
-4. Confirm both new values survive the reboot.
-
-This verifies overwrite/update behavior, not just the first record creation.
-
-### HID/failsafe regression
-
-1. Confirm all eight analog controls operate normally.
-2. Confirm all existing buttons remain correct.
-3. Turn the transmitter off.
-4. Confirm all analog controls neutralize and all buttons release.
-5. Turn the transmitter back on.
-6. Confirm automatic recovery.
-7. Confirm the persisted pitch orientation is still honored.
-
-## Corruption/fallback validation
-
-Do not intentionally damage live flash for this checkpoint.
-
-Corrupt-record and schema-mismatch behavior is exercised by
-`BridgeConfigurationRecordSelfTest` using in-memory records during startup.
-
-A real erased/uninitialized record is naturally exercised on the first
-Checkpoint 5 boot and must fall back to defaults.
-
-A future factory-reset/maintenance feature can provide a controlled way to
-invalidate/erase the stored record; that is intentionally outside this
-checkpoint.
+1. Change LED Brightness and confirm it still persists normally.
+2. Change Pitch Inversion and confirm it still persists normally.
+3. Verify all eight analog controls.
+4. Verify existing buttons.
+5. Turn the transmitter off.
+6. Confirm deterministic failsafe.
+7. Turn the transmitter back on.
+8. Confirm automatic recovery.
 
 ## Success criteria
 
-Checkpoint 5 succeeds when:
+Checkpoint 6 succeeds when:
 
 - normal `pico` build is clean,
 - startup self-tests pass,
-- first boot without a record uses defaults,
-- both parameter values survive a full USB power cycle,
-- subsequent changes overwrite the stored record successfully,
-- LED and HID behavior remain correct,
-- receiver-loss failsafe and reconnection remain unchanged.
+- Restore Defaults appears as a command,
+- selecting it requires explicit confirmation,
+- cancellation leaves runtime and persistent settings untouched,
+- confirmation restores both known-good defaults,
+- restored defaults survive power cycle,
+- ordinary parameter persistence still works,
+- HID/failsafe behavior remains correct.
 
 ## Suggested commit
 
-`feat: persist bridge configuration`
+`feat: add confirmed restore defaults command`
 
 ## Next checkpoint
 
-After validation, persistence is considered proven.
+Once validated, the configuration lifecycle is complete enough to resume
+feature expansion.
 
-The next design choice should be whether to add:
+The next planning decision should compare:
 
-- a controlled Restore Defaults CRSF command, or
-- the next high-value configurable mapping parameter.
+- a high-value mapping/configuration parameter, versus
+- the first small bridge-health telemetry checkpoint.
 
-Do not add schema migration logic until a schema-v2 requirement actually exists.
+Do not add another recovery mechanism merely for symmetry.

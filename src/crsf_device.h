@@ -180,6 +180,27 @@ public:
     ) const;
 
 
+    // Build a stateful COMMAND Parameter Settings Entry (0x2B).
+    //
+    // This helper is used for both normal parameter reads and COMMAND write
+    // responses. COMMAND writes are acknowledged with a full 0x2B entry rather
+    // than a value-only 0x2D frame.
+    bool buildCommandParameterResponse(
+        uint8_t destination,
+        uint8_t origin,
+        uint8_t localAddress,
+        uint8_t parameterNumber,
+        uint8_t parentFolder,
+        const char* name,
+        uint8_t status,
+        uint8_t timeout,
+        const char* info,
+        uint8_t* output,
+        size_t outputCapacity,
+        size_t& outputLength
+    ) const;
+
+
     // A successful FLOAT write is confirmed with a 0x2D frame containing
     // Parameter_number followed by the accepted 4-byte big-endian value.
     bool buildFloatWriteResponse(
