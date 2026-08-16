@@ -186,14 +186,13 @@ bool BridgeParameters::buildReadResponse(
             {
                 LED_BRIGHTNESS_PARAMETER,
                 PITCH_INVERSION_PARAMETER,
-                RESTORE_DEFAULTS_PARAMETER,
                 ROLL_INVERSION_PARAMETER,
-                THROTTLE_INVERSION_PARAMETER,
                 YAW_INVERSION_PARAMETER,
                 AUX1_INVERSION_PARAMETER,
                 AUX2_INVERSION_PARAMETER,
                 AUX3_INVERSION_PARAMETER,
-                AUX4_INVERSION_PARAMETER
+                AUX4_INVERSION_PARAMETER,
+                RESTORE_DEFAULTS_PARAMETER
             };
 
 
@@ -294,23 +293,6 @@ bool BridgeParameters::buildReadResponse(
                     "Roll Inversion",
                     configuration.roll,
                     defaults.roll.inverted,
-                    output,
-                    outputCapacity,
-                    outputLength
-                );
-        }
-
-
-        case THROTTLE_INVERSION_PARAMETER:
-        {
-            return
-                buildInversionParameterResponse(
-                    request,
-                    localAddress,
-                    THROTTLE_INVERSION_PARAMETER,
-                    "Throttle Inversion",
-                    configuration.throttle,
-                    defaults.throttle.inverted,
                     output,
                     outputCapacity,
                     outputLength
@@ -673,24 +655,6 @@ bool BridgeParameters::handleWrite(
                     localAddress,
                     ROLL_INVERSION_PARAMETER,
                     configuration.roll,
-                    BridgeParameterChange::
-                        AxisInversion,
-                    output,
-                    outputCapacity,
-                    outputLength,
-                    result
-                );
-        }
-
-
-        case THROTTLE_INVERSION_PARAMETER:
-        {
-            return
-                handleInversionWrite(
-                    request,
-                    localAddress,
-                    THROTTLE_INVERSION_PARAMETER,
-                    configuration.throttle,
                     BridgeParameterChange::
                         AxisInversion,
                     output,

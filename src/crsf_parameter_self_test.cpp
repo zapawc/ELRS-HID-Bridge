@@ -160,11 +160,7 @@ namespace
             BridgeParameters::
                 PITCH_INVERSION_PARAMETER,
             BridgeParameters::
-                RESTORE_DEFAULTS_PARAMETER,
-            BridgeParameters::
                 ROLL_INVERSION_PARAMETER,
-            BridgeParameters::
-                THROTTLE_INVERSION_PARAMETER,
             BridgeParameters::
                 YAW_INVERSION_PARAMETER,
             BridgeParameters::
@@ -175,6 +171,8 @@ namespace
                 AUX3_INVERSION_PARAMETER,
             BridgeParameters::
                 AUX4_INVERSION_PARAMETER,
+            BridgeParameters::
+                RESTORE_DEFAULTS_PARAMETER,
             0xFF
         };
 
@@ -243,10 +241,6 @@ namespace
             runInversionEntryTest(
                 BridgeParameters::
                     ROLL_INVERSION_PARAMETER
-            ) &&
-            runInversionEntryTest(
-                BridgeParameters::
-                    THROTTLE_INVERSION_PARAMETER
             ) &&
             runInversionEntryTest(
                 BridgeParameters::
@@ -345,20 +339,6 @@ namespace
                 1
             ) ||
             !configuration.roll.inverted
-        )
-        {
-            return false;
-        }
-
-
-        if (
-            !applyInversionWrite(
-                parameters,
-                BridgeParameters::
-                    THROTTLE_INVERSION_PARAMETER,
-                1
-            ) ||
-            !configuration.throttle.inverted
         )
         {
             return false;
@@ -676,7 +656,7 @@ namespace
 bool CrsfParameterSelfTest::run()
 {
     return
-        BridgeParameters::PARAMETER_COUNT == 10 &&
+        BridgeParameters::PARAMETER_COUNT == 9 &&
         runRootFolderResponseTest() &&
         runAllInversionEntriesTest() &&
         runAllInversionWritesTest() &&

@@ -35,33 +35,33 @@ struct BridgeParameterWriteResult
 class BridgeParameters
 {
 public:
-    // Existing parameter IDs remain stable.
+    // ExpressLRS Lua r18 loads and displays top-level device parameters in
+    // ascending numeric parameter-ID order.
     //
-    // New inversion parameters are appended after the already-released
-    // Restore Defaults command rather than renumbering existing entries.
+    // These post-v1.0 parameters have not yet shipped in a feature release, so
+    // use the intended user-facing order now rather than preserving a
+    // development-checkpoint numbering mistake.
     static constexpr uint8_t ROOT_PARAMETER = 0;
 
     static constexpr uint8_t LED_BRIGHTNESS_PARAMETER = 1;
 
     static constexpr uint8_t PITCH_INVERSION_PARAMETER = 2;
 
-    static constexpr uint8_t RESTORE_DEFAULTS_PARAMETER = 3;
+    static constexpr uint8_t ROLL_INVERSION_PARAMETER = 3;
 
-    static constexpr uint8_t ROLL_INVERSION_PARAMETER = 4;
+    static constexpr uint8_t YAW_INVERSION_PARAMETER = 4;
 
-    static constexpr uint8_t THROTTLE_INVERSION_PARAMETER = 5;
+    static constexpr uint8_t AUX1_INVERSION_PARAMETER = 5;
 
-    static constexpr uint8_t YAW_INVERSION_PARAMETER = 6;
+    static constexpr uint8_t AUX2_INVERSION_PARAMETER = 6;
 
-    static constexpr uint8_t AUX1_INVERSION_PARAMETER = 7;
+    static constexpr uint8_t AUX3_INVERSION_PARAMETER = 7;
 
-    static constexpr uint8_t AUX2_INVERSION_PARAMETER = 8;
+    static constexpr uint8_t AUX4_INVERSION_PARAMETER = 8;
 
-    static constexpr uint8_t AUX3_INVERSION_PARAMETER = 9;
+    static constexpr uint8_t RESTORE_DEFAULTS_PARAMETER = 9;
 
-    static constexpr uint8_t AUX4_INVERSION_PARAMETER = 10;
-
-    static constexpr uint8_t PARAMETER_COUNT = 10;
+    static constexpr uint8_t PARAMETER_COUNT = 9;
 
 
     explicit BridgeParameters(
