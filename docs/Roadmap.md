@@ -150,9 +150,9 @@ Do not restart or broaden this architecture work unless a demonstrated requireme
 
 ---
 
-## 5. Current CRSF Device Discovery Proof-of-Concept
+## 5. CRSF Device Discovery
 
-The first bidirectional feature is deliberately limited to identity discovery.
+The first bidirectional feature is deliberately limited to identity discovery and is hardware validated.
 
 ### Completed
 
@@ -171,8 +171,8 @@ The first bidirectional feature is deliberately limited to identity discovery.
 
 ### Live discovery checkpoint
 
-- [x] select an experimental bench address: `0xC8` Flight Controller
-- [x] isolate proof-of-concept bridge identity in `bridge_identity.h`
+- [x] validate and retain reference address: `0xC8` Flight Controller
+- [x] isolate bridge identity in `bridge_identity.h`
 - [x] wire Device Info construction to the live `CrsfUart::write()` path
 - [x] limit responses to broadcast/direct Device Ping traffic through the tested builder
 - [x] validate RP2/Ranger/EdgeTX routing on hardware
@@ -180,20 +180,22 @@ The first bidirectional feature is deliberately limited to identity discovery.
 - [x] confirm 333 Hz Full RC-to-HID remains unaffected with live TX enabled
 - [x] confirm receiver-loss failsafe and reconnect remain unchanged
 
-### Still intentionally unresolved
+### Release identity checkpoint
 
-- [ ] final production bridge CRSF device address
-- [ ] production Serial Number value/source
-- [ ] production Hardware ID value
-- [ ] production Firmware ID/version encoding
+- [x] retain validated reference CRSF address `0xC8`
+- [x] define stable project Serial Number field `0x45484231` (`EHB1`)
+- [x] define stable reference Hardware ID `0x51545059` (`QTPY`)
+- [x] centralize semantic firmware version in `firmware_version.h`
+- [x] derive CRSF Firmware ID from the canonical version source
+- [x] add deterministic version/identity startup self-test
 
-The current `0xC8` address and identity fields are proof-of-concept policy, not release ABI. The reusable Device Info builder still accepts caller-supplied address/identity values.
+Current development version is `0.3.0-dev`; its packed CRSF Firmware ID is `0x00030000`. The CRSF Serial Number is a project-family identifier, not a per-unit unique hardware serial. The reusable Device Info builder still accepts caller-supplied address/identity values.
 
 ### Proof-of-concept result
 
 The live Device Ping -> Device Info exchange is proven on the reference RP2/Ranger/EdgeTX path. EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**, and normal 333 Hz Full/Liftoff operation remains unaffected.
 
-The `0xC8` routing choice is therefore validated for the reference proof-of-concept. Final production identity/version values remain an explicit release-policy decision rather than a reason to expand protocol scope now.
+The `0xC8` routing choice and reference identity policy are therefore fixed for v1.0 hardening. Future version changes update the canonical firmware version source rather than CRSF protocol code.
 
 ### Scope stop
 
@@ -229,8 +231,20 @@ The discovery proof-of-concept is valuable because it validates the bidirectiona
 - [ ] clean build from source on documented environment
 - [ ] release binary
 - [ ] open-source license selected
-- [ ] version/tag/release process
-- [ ] final README/Architecture/Protocol/Roadmap synchronization
+- [x] canonical firmware version source and CRSF Firmware ID encoding
+- [ ] tag/release process
+- [x] README/Architecture/Protocol/Roadmap synchronized through release-identity checkpoint
+- [ ] final release-candidate documentation validation
+
+### Current next release gates
+
+1. Select and add the open-source license.
+2. Validate wiring and EdgeTX setup instructions from a clean-reader perspective.
+3. Validate a clean `pico` build from the documented environment.
+4. Define the tag/release procedure and produce a tested release binary.
+5. Perform final release-candidate documentation/regression validation.
+
+`docs/Release.md` tracks these gates and the version transition rules.
 
 ### Strongly preferred
 

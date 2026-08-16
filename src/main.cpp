@@ -15,6 +15,7 @@
 #include "crsf_uart.h"
 #include "failsafe_policy.h"
 #include "failsafe_policy_self_test.h"
+#include "firmware_version_self_test.h"
 #include "maintenance_controller.h"
 #include "normalized_channels.h"
 #include "raw_channels.h"
@@ -107,6 +108,7 @@ void setup()
     // - Device Ping recognition
     // - Device Info response construction
     // - complete failsafe output policy
+    // - canonical firmware version / CRSF Firmware ID consistency
     //
     // None of these startup tests transmit on the live CRSF UART.
     // -------------------------------------------------------------------------
@@ -114,7 +116,8 @@ void setup()
         CrsfSelfTest::run() &&
         CrsfFrameEncoderSelfTest::run() &&
         CrsfDeviceSelfTest::run() &&
-        FailsafePolicySelfTest::run();
+        FailsafePolicySelfTest::run() &&
+        FirmwareVersionSelfTest::run();
 
 
     if (!startupSelfTestsPassed)

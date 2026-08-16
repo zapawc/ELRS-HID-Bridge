@@ -15,7 +15,7 @@ No display, external pushbutton, custom PCB, custom USB driver, or mandatory com
 
 ## Project Status
 
-**Current Version:** 0.3  
+**Current Version:** 0.3.0-dev  
 **Status:** Active v1.0 hardening
 
 The core wireless joystick path is functional and has been validated in Liftoff.
@@ -43,7 +43,7 @@ The core wireless joystick path is functional and has been validated in Liftoff.
 
 ### Current protocol checkpoint
 
-The identity-only bidirectional CRSF discovery proof-of-concept is hardware validated. A valid Device Ping (`0x28`) can produce the self-tested Parameter Device Information (`0x29`) response and send it through `CrsfUart::write()`.
+The identity-only bidirectional CRSF discovery path is hardware validated. A valid Device Ping (`0x28`) can produce the self-tested Parameter Device Information (`0x29`) response and send it through `CrsfUart::write()`.
 
 Validated behavior:
 
@@ -51,11 +51,13 @@ Validated behavior:
 - Broadcast and directly addressed pings are eligible for a response.
 - Pings addressed to another CRSF device are ignored.
 - Each consumed ping can produce at most one Device Info response attempt.
-- The experimental local CRSF node address `0xC8` (Flight Controller) successfully routes through RP2 -> ELRS RF -> Ranger -> EdgeTX.
+- The reference local CRSF node address `0xC8` (Flight Controller) successfully routes through RP2 -> ELRS RF -> Ranger -> EdgeTX.
 - EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**.
 - 333 Hz Full RC-to-HID operation and Liftoff performance remain normal with live CRSF TX enabled.
 - The discovery identity exposes zero CRSF parameters.
-- Proof-of-concept Serial/Hardware/Firmware ID fields are deterministic placeholders and are not yet release identity policy.
+- CRSF Serial/Hardware IDs are stable project-defined identifiers for the reference build.
+- CRSF Firmware ID is derived from the canonical firmware version in `firmware_version.h`.
+- `0.3.0-dev` encodes as CRSF Firmware ID `0x00030000`.
 
 CRSF feature expansion is now frozen for the v1.0 cycle. The project is moving through release hardening rather than adding a parameter tree or other outbound protocol features.
 
@@ -389,7 +391,11 @@ git clone https://github.com/zapawc/ELRS-HID-Bridge.git
 
 Open the project in Visual Studio Code with the PlatformIO extension installed, then use the normal PlatformIO build/upload controls for the selected environment.
 
+Use the `pico` environment for the normal HID-only release build. Use `pico_debug` only when USB CDC debug logging is required.
+
 The project intentionally prefers the normal VS Code/PlatformIO workflow for routine builds and uploads. Direct `pio` CLI commands are mainly useful when troubleshooting requires them.
+
+Release/version policy and the remaining v1.0 gates are documented in `docs/Release.md`.
 
 ---
 
@@ -426,7 +432,7 @@ For parser/CRSF changes, also validate:
 
 ## Current CRSF Device Discovery Work
 
-The first bidirectional CRSF proof-of-concept is intentionally small.
+The first bidirectional CRSF feature remains intentionally small.
 
 Implemented:
 
@@ -436,21 +442,49 @@ Implemented:
 - deterministic Device Info response construction
 - response routing/field/CRC self-tests
 - live Device Info transmission for valid broadcast/direct pings
-- isolated proof-of-concept identity/address definition in `bridge_identity.h`
+- isolated project identity/address definition in `bridge_identity.h`
+- canonical semantic firmware version in `firmware_version.h`
+- startup self-test that verifies firmware version / CRSF Firmware ID consistency
 
 Hardware validation completed:
 
-- experimental `0xC8` local address routes successfully through the RP2/Ranger/EdgeTX path
+- reference `0xC8` local address routes successfully through the RP2/Ranger/EdgeTX path
 - EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**
 - live TX does not disturb the 333 Hz Full RC/HID path or Liftoff behavior
 
 Not implemented yet:
 
-- final production bridge CRSF address/identity policy
 - CRSF parameter tree
 - persistent configuration
 
-Identity-only discovery has succeeded cleanly. Full transmitter-side configuration remains post-v1.0 work; v1.0 now prioritizes deterministic failsafe behavior, documentation, reproducible builds, and release packaging.
+Identity-only discovery has succeeded cleanly. Version/identity metadata is now centralized for release hardening. Full transmitter-side configuration remains post-v1.0 work; v1.0 now prioritizes documentation validation, reproducible builds, licensing, and release packaging.
+
+---
+
+## Firmware Versioning
+
+`src/firmware_version.h` is the canonical firmware version source.
+
+Current development version:
+
+```text
+0.3.0-dev
+```
+
+The CRSF Device Info `Firmware_ID` is derived from the same constants using:
+
+```text
+bits 31..24  major
+bits 23..16  minor
+bits 15..8   patch
+bits 7..0    reserved (0)
+```
+
+For `0.3.0-dev`, the numeric CRSF Firmware ID is `0x00030000`. The human-readable prerelease label is intentionally not encoded into that CRSF field.
+
+A startup self-test verifies that the version string/tuple and the CRSF identity remain synchronized.
+
+Version tags and final release-number transition policy are tracked in `docs/Release.md`.
 
 ---
 
@@ -460,6 +494,7 @@ Identity-only discovery has succeeded cleanly. Full transmitter-side configurati
 docs/
     Architecture.md
     Protocol.md
+    Release.md
     Roadmap.md
 
 src/

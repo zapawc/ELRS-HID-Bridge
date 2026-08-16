@@ -281,21 +281,23 @@ CRC = DVB-S2 CRSF CRC over Type through payload
 
 ### Current live discovery identity
 
-The first hardware proof-of-concept uses:
+The reference implementation uses:
 
 ```text
 Local CRSF address  0xC8  Flight Controller
 Device name         ELRS-HID-Bridge
-Serial Number       0x45484231  (POC: "EHB1")
-Hardware ID         0x51545059  (POC: "QTPY")
-Firmware ID         0x00000001  (POC)
+Serial Number       0x45484231  ("EHB1" project-family ID)
+Hardware ID         0x51545059  ("QTPY" reference hardware)
+Firmware ID         0x00030000  (firmware 0.3.0)
 Parameters total    0
 Parameter version   0
 ```
 
-`0xC8` was selected because the bridge occupies the flight-controller side of the RP2 UART. The three 32-bit identity values are deterministic proof-of-concept constants only; they are not claimed to be globally assigned identifiers and are not yet release identity policy.
+`0xC8` is retained because the bridge occupies the flight-controller side of the RP2 UART and that routing has been validated on the reference RP2/Ranger/EdgeTX path. `EHB1` and `QTPY` are deterministic project-defined identifiers rather than globally assigned IDs; the Serial Number field is not a per-unit unique serial number.
 
-These values are isolated in `bridge_identity.h`. The generic construction layer still accepts caller-supplied address/identity data so project identity policy can change without changing CRSF encoding mechanics.
+The firmware ID is derived from `firmware_version.h` using `major << 24 | minor << 16 | patch << 8`, with the low byte reserved. The current `0.3.0-dev` tree therefore reports `0x00030000`; the `-dev` label is not encoded in the numeric CRSF field.
+
+Identity values remain isolated in `bridge_identity.h`, while firmware version is centralized in `firmware_version.h`. The generic construction layer still accepts caller-supplied address/identity data, so project policy remains separate from CRSF encoding mechanics.
 
 Hardware validation result:
 
@@ -426,7 +428,7 @@ Pre-v1.0 protocol scope:
 - identity-only Device Ping -> Device Info discovery is complete and hardware validated,
 - no additional CRSF feature work is required for v1.0,
 - keep the successful discovery path stable while release hardening proceeds,
-- review final identity/version constants as part of release metadata policy.
+- keep identity/version constants sourced from `bridge_identity.h` and `firmware_version.h`; no further CRSF identity work is required for v1.0.
 
 Post-v1.0 candidates:
 

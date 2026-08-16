@@ -347,14 +347,14 @@ The Device Info builder currently:
 
 The builder does **not** transmit.
 
-The Device Info builder continues to receive address and identity as caller-supplied data. The current production proof-of-concept supplies those values through `bridge_identity.h`, keeping experimental discovery policy outside the protocol encoder and easy to revise after RP2/Ranger/EdgeTX validation.
+The Device Info builder continues to receive address and identity as caller-supplied data. The reference implementation supplies those values through `bridge_identity.h`, keeping project identity policy outside the reusable protocol encoder.
 
 
 ### 5.9 BridgeIdentity
 
-Owns the current project-level CRSF discovery identity used by the live proof-of-concept.
+Owns the project-level CRSF discovery identity used by the live reference implementation.
 
-Current experimental values:
+Current reference values:
 
 ```text
 Local CRSF address  0xC8 (Flight Controller)
@@ -362,11 +362,27 @@ Device name         ELRS-HID-Bridge
 Parameters          0
 ```
 
-The `0xC8` selection reflects the bridge's FC-side position on the RP2 UART. Serial/Hardware/Firmware ID values are deterministic proof-of-concept placeholders, not globally assigned identifiers or final release identity policy.
+The `0xC8` selection reflects the bridge's FC-side position on the RP2 UART and has been validated through RP2/Ranger/EdgeTX hardware testing. `EHB1` and `QTPY` are stable project-defined identifiers for the reference implementation; the Serial Number field is a project-family identifier rather than a per-unit unique serial number. Firmware ID is derived from `FirmwareVersion::CRSF_ID`.
 
 This separation is intentional: `CrsfDevice` owns protocol mechanics, while project identity/routing policy remains outside the reusable protocol layer.
 
-### 5.10 BridgeState
+### 5.10 FirmwareVersion
+
+`firmware_version.h` is the canonical firmware-version source.
+
+Current version:
+
+```text
+0.3.0-dev
+```
+
+The CRSF `Firmware_ID` packs the semantic version tuple into the upper 24 bits of a `uint32_t`; the low byte is reserved and currently zero. The prerelease label is human-readable metadata and is not encoded into the CRSF numeric field.
+
+`FirmwareVersionSelfTest` verifies the canonical tuple/string and confirms that `BridgeIdentity::CRSF_FIRMWARE_ID` consumes this source rather than maintaining a second independent version constant.
+
+This keeps version policy separate from CRSF encoding mechanics and gives future release/tag tooling one firmware version source to update.
+
+### 5.11 BridgeState
 
 Central application-state model for operational facts.
 
@@ -374,7 +390,7 @@ Current responsibilities include RC/UART/link facts and receiver timeout state.
 
 It must remain an application-state model rather than a dumping ground for hardware implementation details.
 
-### 5.11 ChannelNormalizer
+### 5.12 ChannelNormalizer
 
 Converts CRSF channel values into the protocol-independent internal range.
 
@@ -384,7 +400,7 @@ Current normalized range:
 0 .. 65535
 ```
 
-### 5.12 BridgeConfiguration
+### 5.13 BridgeConfiguration
 
 Canonical runtime configuration model.
 
@@ -392,7 +408,7 @@ It is currently populated from compiled defaults and is consumed by mapping/stat
 
 Future CRSF parameters and persistent storage should modify this same model instead of creating parallel configuration paths.
 
-### 5.13 ChannelMapper
+### 5.14 ChannelMapper
 
 Consumes `NormalizedChannels` plus `BridgeConfiguration` and produces `ChannelState`.
 
@@ -428,7 +444,7 @@ Throttle normal
 Yaw      normal
 ```
 
-### 5.14 ChannelState
+### 5.15 ChannelState
 
 Protocol-independent semantic HID state.
 
@@ -447,7 +463,7 @@ Rz       Auxiliary Analog 4
 
 The descriptor supports 32 buttons.
 
-### 5.15 FailsafePolicy
+### 5.16 FailsafePolicy
 
 Owns construction of deterministic failsafe HID state.
 
@@ -475,7 +491,7 @@ Every HID output is explicitly assigned by `FailsafePolicy`; no proportional or 
 
 When valid RC frames resume, live mapped control resumes automatically.
 
-### 5.16 UsbHid
+### 5.17 UsbHid
 
 Owns USB HID presentation:
 
@@ -486,13 +502,13 @@ Owns USB HID presentation:
 
 It remains unaware of CRSF details.
 
-### 5.17 BootButton
+### 5.18 BootButton
 
 Low-level onboard BOOT-button abstraction.
 
 It exposes physical state/duration/events and does not encode Bind/Wi-Fi semantics.
 
-### 5.18 MaintenanceController
+### 5.19 MaintenanceController
 
 Owns maintenance-button policy.
 
@@ -509,13 +525,13 @@ Selection occurs while held; action occurs on release.
 
 Bind/Wi-Fi actions are currently reserved and do not transmit receiver commands.
 
-### 5.19 StatusLed
+### 5.20 StatusLed
 
 Low-level NeoPixel output abstraction.
 
 It produces requested colors/patterns but does not decide display ownership.
 
-### 5.20 StatusDisplay
+### 5.21 StatusDisplay
 
 Arbitrates competing LED presentation modes.
 
@@ -544,7 +560,7 @@ Red    startup/self-test error
 
 Pure green is reserved for fully healthy normal HID operation.
 
-### 5.21 Startup self-tests
+### 5.22 Startup self-tests
 
 Protocol transformations are tested deterministically during startup where practical.
 
@@ -683,11 +699,11 @@ CRSF feature expansion is frozen for the v1.0 cycle.
 
 ### 8.2 Address/identity policy
 
-The protocol builder intentionally does not hard-code the bridge address or identity. The proof-of-concept policy remains isolated in `bridge_identity.h`.
+The protocol builder intentionally does not hard-code the bridge address or identity. Reference-project policy remains isolated in `bridge_identity.h`.
 
-The `0xC8` Flight Controller address is now validated as routable on the reference RP2/Ranger/EdgeTX path. It remains a proof-of-concept/release-policy choice rather than a globally unique bridge address assignment.
+The `0xC8` Flight Controller address is validated as routable on the reference RP2/Ranger/EdgeTX path and is retained as the reference v1.0 address policy.
 
-Serial/Hardware/Firmware identity values are still deterministic placeholders and must be reviewed before public v1.0 release metadata is finalized.
+Serial Number `0x45484231` (`EHB1`) and Hardware ID `0x51545059` (`QTPY`) are stable project-defined identifiers. Firmware ID is no longer an independent placeholder: it is derived from the canonical semantic version source in `firmware_version.h`.
 
 ### 8.3 Future CRSF configuration
 
