@@ -1,29 +1,29 @@
 #pragma once
 
-#include <stdint.h>
-
-#include "crsf_dispatcher.h"
-#include "crsf_parser.h"
+#include "crsf_frame.h"
 #include "link_statistics.h"
+#include "link_statistics_decoder.h"
 #include "raw_channels.h"
+#include "rc_channel_decoder.h"
 
 
-class CrsfDecoder
+class CrsfDispatcher
 {
 public:
     void reset();
 
 
-    // Compatibility facade for the existing CRSF receive path.
+    // Route a previously validated CRSF frame to the appropriate
+    // frame-type decoder.
     //
-    // Bytes are passed to CrsfParser. Complete, validated frames
-    // are synchronously passed to CrsfDispatcher.
+    // CrsfDispatcher does not perform framing, synchronization,
+    // length validation, or CRC validation. Those responsibilities
+    // belong to CrsfParser.
     //
-    // This preserves the public CrsfDecoder interface used by the
-    // rest of the firmware while separating parsing from frame-type
-    // interpretation.
-    void pushByte(
-        uint8_t byte
+    // Unsupported but otherwise valid CRSF frame types are
+    // intentionally ignored.
+    void dispatch(
+        const CrsfFrame& frame
     );
 
 
@@ -56,7 +56,17 @@ public:
 
 
 private:
-    CrsfParser parser;
+    bool newChannels = false;
 
-    CrsfDispatcher dispatcher;
+    bool newLinkStatistics = false;
+
+
+    RawChannels channels;
+
+    LinkStatistics linkStatistics;
+
+
+    RcChannelDecoder rcChannelDecoder;
+
+    LinkStatisticsDecoder linkStatisticsDecoder;
 };
