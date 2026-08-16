@@ -165,29 +165,38 @@ The first bidirectional feature is deliberately limited to identity discovery.
 - [x] deterministic self-test for null-terminated device name
 - [x] deterministic self-test for frame length and CRC
 
-### Intentionally unresolved at this checkpoint
+### Live discovery checkpoint
 
-- [ ] production bridge CRSF device address
+- [x] select an experimental bench address: `0xC8` Flight Controller
+- [x] isolate proof-of-concept bridge identity in `bridge_identity.h`
+- [x] wire Device Info construction to the live `CrsfUart::write()` path
+- [x] limit responses to broadcast/direct Device Ping traffic through the tested builder
+- [ ] validate RP2/Ranger/EdgeTX routing on hardware
+- [ ] confirm EdgeTX discovers `ELRS-HID-Bridge`
+- [ ] confirm 333 Hz Full RC-to-HID remains unaffected with live TX enabled
+- [ ] confirm receiver-loss failsafe and reconnect remain unchanged
+
+### Still intentionally unresolved
+
+- [ ] final production bridge CRSF device address
 - [ ] production Serial Number value/source
 - [ ] production Hardware ID value
 - [ ] production Firmware ID/version encoding
-- [ ] live Device Info transmission
-- [ ] EdgeTX device discovery
 
-The Device Info builder therefore takes local address and identity as caller-supplied data rather than embedding a premature project policy.
+The current `0xC8` address and identity fields are proof-of-concept policy, not release ABI. The reusable Device Info builder still accepts caller-supplied address/identity values.
 
 ### Immediate next development step
 
-Wire the already-tested Device Info response to the live TX path with the smallest possible production change.
+Do not add more CRSF functionality yet. Validate the live Device Ping -> Device Info exchange on the actual RP2/Ranger/EdgeTX path.
 
 Success criteria:
 
-1. only a valid Device Ping can trigger the response,
-2. the response is sent with the tested frame builder,
-3. RP2/Ranger/EdgeTX routing is observed on real hardware,
-4. EdgeTX discovers `ELRS-HID-Bridge` or the captured behavior clearly identifies the remaining routing issue,
-5. 333 Hz Full RC-to-HID behavior remains unaffected,
-6. receiver-loss failsafe and reconnect remain unchanged.
+1. only intended Device Ping traffic generates a response,
+2. RP2/Ranger/EdgeTX routing is observed on real hardware,
+3. EdgeTX discovers `ELRS-HID-Bridge` or the observed behavior clearly identifies the remaining routing issue,
+4. 333 Hz Full RC-to-HID behavior remains unaffected,
+5. receiver-loss failsafe and reconnect remain unchanged,
+6. the result is documented before any address or protocol expansion.
 
 If discovery fails, inspect addressing/routing before changing architecture or inventing a proprietary address convention.
 
@@ -508,7 +517,7 @@ commit/tag checkpoint
 
 ### Bidirectional CRSF regression checklist
 
-When live TX is enabled:
+With live Device Info TX enabled:
 
 - only intended requests generate responses
 - destination/origin values match observed routing requirements

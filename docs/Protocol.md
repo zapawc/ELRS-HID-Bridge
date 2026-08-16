@@ -26,7 +26,7 @@ Reference UART configuration:
 | `0x14` | Link Statistics | Decoded and used for diagnostics only |
 | `0x16` | RC Channels Packed | Decoded; primary HID control source |
 | `0x28` | Parameter Ping Devices / Device Ping | Recognized and routed to `CrsfDevice` |
-| `0x29` | Parameter Device Information / Device Info | Response construction implemented and self-tested; live TX not enabled |
+| `0x29` | Parameter Device Information / Device Info | Construction self-tested; live response TX enabled for discovery POC; hardware routing validation pending |
 | `0x2B` | Parameter Settings Entry | Defined for future work; not implemented |
 | `0x2C` | Parameter Read | Defined for future work; not implemented |
 | `0x2D` | Parameter Write | Defined for future work; not implemented |
@@ -213,9 +213,13 @@ Device Ping recognized
     ->
 routing retained
     ->
-main loop consumes/clears ping
+builder accepts only broadcast or local-address traffic
     ->
-no live response transmitted yet
+Device Info constructed
+    ->
+CrsfUart::write() sends one response attempt
+    ->
+ping cleared
 ```
 
 ---
@@ -237,7 +241,7 @@ CRSF uses big-endian byte ordering for multi-byte values.
 
 ### Current implementation checkpoint
 
-`CrsfDevice::buildDeviceInfoResponse()` constructs a complete extended Device Info frame but does not transmit it.
+`CrsfDevice::buildDeviceInfoResponse()` constructs the complete extended Device Info frame. The production loop now calls the builder for received Device Ping traffic and passes successful responses to `CrsfUart::write()`.
 
 Inputs:
 
@@ -275,13 +279,23 @@ Payload = Device Info fields
 CRC = DVB-S2 CRSF CRC over Type through payload
 ```
 
-### Why address/identity are caller supplied
+### Current live discovery identity
 
-The project has not yet validated the final live device address/identity policy through the RP2/Ranger/EdgeTX path.
+The first hardware proof-of-concept uses:
 
-The construction layer therefore avoids hard-coding a permanent bridge address or fake production identifiers merely to complete the encoding test.
+```text
+Local CRSF address  0xC8  Flight Controller
+Device name         ELRS-HID-Bridge
+Serial Number       0x45484231  (POC: "EHB1")
+Hardware ID         0x51545059  (POC: "QTPY")
+Firmware ID         0x00000001  (POC)
+Parameters total    0
+Parameter version   0
+```
 
-The next hardware step will determine which address/routing behavior EdgeTX actually accepts before that policy is committed.
+`0xC8` was selected because the bridge occupies the flight-controller side of the RP2 UART. The three 32-bit identity values are deterministic proof-of-concept constants only; they are not claimed to be globally assigned identifiers and are not yet release identity policy.
+
+These values are isolated in `bridge_identity.h`. The generic construction layer still accepts caller-supplied address/identity data so hardware findings can change project policy without changing CRSF encoding mechanics.
 
 ---
 
@@ -338,11 +352,11 @@ RP2 RX <- QT Py TX
 
 `CrsfUart` provides both receive and transmit primitives.
 
-However:
+The production firmware now uses the transmit primitive for exactly one purpose: reply to an eligible Device Ping with the already self-tested Device Info frame.
 
-> TX capability existing in the transport does not mean the current production firmware is already transmitting CRSF Device Info.
+No parameter entries, writes, commands, telemetry sensors, Bind/Wi-Fi commands, or other outbound CRSF behavior are enabled by this checkpoint.
 
-The next checkpoint is specifically to connect the already-tested Device Info frame to the live TX primitive and observe real routing/discovery behavior.
+The next checkpoint is hardware observation: verify whether the RP2/Ranger/EdgeTX route carries the response and whether EdgeTX discovers `ELRS-HID-Bridge`.
 
 ---
 
@@ -393,11 +407,11 @@ This separation is a core safety/maintainability rule.
 
 Immediate:
 
-1. wire Device Info response construction to `CrsfUart::write()`,
-2. use a controlled temporary address/identity for hardware discovery testing,
-3. verify RP2/Ranger/EdgeTX routing,
-4. verify RC/HID/failsafe behavior is unchanged,
-5. document the observed routing behavior.
+1. build and flash the live Device Info TX checkpoint,
+2. verify RP2/Ranger/EdgeTX routing,
+3. look for `ELRS-HID-Bridge` through the ExpressLRS Lua `Other Devices` path,
+4. verify 333 Hz Full RC/HID/failsafe/reconnect behavior is unchanged,
+5. document the observed routing behavior before changing address policy or adding protocol features.
 
 Post-v1.0 candidates:
 

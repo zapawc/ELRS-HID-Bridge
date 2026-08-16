@@ -253,7 +253,7 @@ Responsibilities:
 
 It does not interpret CRSF frame types.
 
-The TX primitive already exists; live Device Info response transmission is not yet wired into the production loop.
+The TX primitive is now used by one deliberately narrow production path: a valid Device Ping may generate a Device Info response during the discovery proof-of-concept. No other live outbound CRSF behavior is enabled.
 
 ### 5.2 CrsfParser
 
@@ -347,9 +347,26 @@ The Device Info builder currently:
 
 The builder does **not** transmit.
 
-The local CRSF device address and production identity values are intentionally caller-supplied at this checkpoint. This prevents protocol construction tests from prematurely locking in routing policy before the real RP2/Ranger/EdgeTX discovery path is validated.
+The Device Info builder continues to receive address and identity as caller-supplied data. The current production proof-of-concept supplies those values through `bridge_identity.h`, keeping experimental discovery policy outside the protocol encoder and easy to revise after RP2/Ranger/EdgeTX validation.
 
-### 5.9 BridgeState
+
+### 5.9 BridgeIdentity
+
+Owns the current project-level CRSF discovery identity used by the live proof-of-concept.
+
+Current experimental values:
+
+```text
+Local CRSF address  0xC8 (Flight Controller)
+Device name         ELRS-HID-Bridge
+Parameters          0
+```
+
+The `0xC8` selection reflects the bridge's FC-side position on the RP2 UART. Serial/Hardware/Firmware ID values are deterministic proof-of-concept placeholders, not globally assigned identifiers or final release identity policy.
+
+This separation is intentional: `CrsfDevice` owns protocol mechanics, while project identity/routing policy remains outside the reusable protocol layer.
+
+### 5.10 BridgeState
 
 Central application-state model for operational facts.
 
@@ -357,7 +374,7 @@ Current responsibilities include RC/UART/link facts and receiver timeout state.
 
 It must remain an application-state model rather than a dumping ground for hardware implementation details.
 
-### 5.10 ChannelNormalizer
+### 5.11 ChannelNormalizer
 
 Converts CRSF channel values into the protocol-independent internal range.
 
@@ -367,7 +384,7 @@ Current normalized range:
 0 .. 65535
 ```
 
-### 5.11 BridgeConfiguration
+### 5.12 BridgeConfiguration
 
 Canonical runtime configuration model.
 
@@ -375,7 +392,7 @@ It is currently populated from compiled defaults and is consumed by mapping/stat
 
 Future CRSF parameters and persistent storage should modify this same model instead of creating parallel configuration paths.
 
-### 5.12 ChannelMapper
+### 5.13 ChannelMapper
 
 Consumes `NormalizedChannels` plus `BridgeConfiguration` and produces `ChannelState`.
 
@@ -411,7 +428,7 @@ Throttle normal
 Yaw      normal
 ```
 
-### 5.13 ChannelState
+### 5.14 ChannelState
 
 Protocol-independent semantic HID state.
 
@@ -430,7 +447,7 @@ Rz       Auxiliary Analog 4
 
 The descriptor supports 32 buttons.
 
-### 5.14 FailsafePolicy
+### 5.15 FailsafePolicy
 
 Owns construction of deterministic failsafe HID state.
 
@@ -454,7 +471,7 @@ Auxiliary analog behavior still needs an explicit pre-v1.0 decision and test.
 
 When valid RC frames resume, live mapped control resumes automatically.
 
-### 5.15 UsbHid
+### 5.16 UsbHid
 
 Owns USB HID presentation:
 
@@ -465,13 +482,13 @@ Owns USB HID presentation:
 
 It remains unaware of CRSF details.
 
-### 5.16 BootButton
+### 5.17 BootButton
 
 Low-level onboard BOOT-button abstraction.
 
 It exposes physical state/duration/events and does not encode Bind/Wi-Fi semantics.
 
-### 5.17 MaintenanceController
+### 5.18 MaintenanceController
 
 Owns maintenance-button policy.
 
@@ -488,13 +505,13 @@ Selection occurs while held; action occurs on release.
 
 Bind/Wi-Fi actions are currently reserved and do not transmit receiver commands.
 
-### 5.18 StatusLed
+### 5.19 StatusLed
 
 Low-level NeoPixel output abstraction.
 
 It produces requested colors/patterns but does not decide display ownership.
 
-### 5.19 StatusDisplay
+### 5.20 StatusDisplay
 
 Arbitrates competing LED presentation modes.
 
@@ -523,7 +540,7 @@ Red    startup/self-test error
 
 Pure green is reserved for fully healthy normal HID operation.
 
-### 5.20 Startup self-tests
+### 5.21 Startup self-tests
 
 Protocol transformations are tested deterministically during startup where practical.
 

@@ -42,18 +42,19 @@ The core wireless joystick path is functional and has been validated in Liftoff.
 
 ### Current protocol checkpoint
 
-The firmware can now deterministically construct a CRSF Parameter Device Information (`0x29`) response for a valid Device Ping.
+The first live bidirectional CRSF discovery experiment is now enabled. A valid Device Ping (`0x28`) can produce the already self-tested Parameter Device Information (`0x29`) response and send it through `CrsfUart::write()`.
 
-This checkpoint is intentionally **construction-only**:
+Current behavior:
 
-- Device Info encoding is covered by startup self-tests.
-- Broadcast and directly addressed pings are supported by the builder.
-- Pings addressed to another CRSF device are rejected by the builder.
-- Destination/origin routing, name termination, big-endian identity fields, length, and CRC are tested.
-- The live firmware still consumes Device Ping without transmitting a response.
-- The final CRSF device address and production identity values are intentionally not hard-coded yet.
+- Device Info encoding remains covered by deterministic startup self-tests.
+- Broadcast and directly addressed pings are eligible for a response.
+- Pings addressed to another CRSF device are ignored.
+- Each consumed ping can produce at most one Device Info response attempt.
+- The experimental local CRSF node address is `0xC8` (Flight Controller), matching the bridge's FC-side position on the RP2 UART.
+- The discovery identity is `ELRS-HID-Bridge` with zero CRSF parameters.
+- Proof-of-concept Serial/Hardware/Firmware ID fields are deterministic placeholders and are not yet release identity policy.
 
-The next protocol experiment is to connect the tested Device Info response to `CrsfUart::write()` and determine whether the RP2/Ranger/EdgeTX path discovers `ELRS-HID-Bridge` as a CRSF device.
+The next protocol task is **hardware validation, not more protocol implementation**: determine whether the RP2/Ranger/EdgeTX path discovers `ELRS-HID-Bridge`, capture the observed routing behavior, and verify that 333 Hz Full RC-to-HID operation, failsafe, reconnect, and HID reporting remain unaffected.
 
 ---
 
@@ -329,7 +330,7 @@ Supporting application boundaries include:
 - `CrsfFrameEncoder` for outbound extended-frame construction
 - `CrsfDevice` for CRSF device-level traffic
 
-`CrsfUart` provides both RX and TX primitives, but the production loop does not yet transmit Device Info traffic.
+`CrsfUart` provides both RX and TX primitives. The production loop now uses TX only for the controlled Device Ping -> Device Info discovery experiment.
 
 See `docs/Architecture.md` for the detailed boundaries and design rules.
 
@@ -426,13 +427,18 @@ Implemented:
 - extended-frame encoder
 - deterministic Device Info response construction
 - response routing/field/CRC self-tests
+- live Device Info transmission for valid broadcast/direct pings
+- isolated proof-of-concept identity/address definition in `bridge_identity.h`
+
+Current hardware-validation items:
+
+- confirm the experimental `0xC8` local address through the RP2/Ranger/EdgeTX path
+- confirm EdgeTX discovery of `ELRS-HID-Bridge`
+- verify live TX does not disturb the 333 Hz Full RC/HID path
 
 Not implemented yet:
 
-- live Device Info transmission
-- final bridge CRSF device address
-- production serial/hardware/firmware identity values
-- EdgeTX discovery validation
+- final production bridge CRSF address/identity policy
 - CRSF parameter tree
 - persistent configuration
 

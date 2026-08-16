@@ -1,13 +1,15 @@
 #include <Arduino.h>
-
 #include "boot_button.h"
 #include "bridge_configuration.h"
+#include "bridge_identity.h"
 #include "bridge_state.h"
 #include "channel_mapper.h"
 #include "channel_normalizer.h"
 #include "channel_state.h"
 #include "crsf_decoder.h"
+#include "crsf_device.h"
 #include "crsf_device_self_test.h"
+#include "crsf_frame_encoder.h"
 #include "crsf_frame_encoder_self_test.h"
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
@@ -47,7 +49,6 @@ FailsafePolicy failsafePolicy;
 
 
 UsbHid usbHid;
-
 
 StatusLed statusLed;
 
@@ -103,10 +104,10 @@ void setup()
     // - receive parsing/decoding
     // - outbound extended-frame construction
     // - Device Ping recognition
+    // - Device Info response construction
     //
     // None of these startup tests transmit on the live CRSF UART.
     // -------------------------------------------------------------------------
-
     startupSelfTestsPassed =
         CrsfSelfTest::run() &&
         CrsfFrameEncoderSelfTest::run() &&
@@ -144,7 +145,6 @@ void setup()
         channelState
     );
 
-
     statusDisplay.update(
         millis(),
         bridgeState
@@ -169,7 +169,6 @@ void loop()
     const BootButtonState buttonState =
         bootButton.update();
 
-
     const MaintenanceUpdate maintenanceUpdate =
         maintenanceController.update(
             buttonState
@@ -179,7 +178,6 @@ void loop()
     // -------------------------------------------------------------------------
     // Maintenance selection display
     // -------------------------------------------------------------------------
-
     if (
         maintenanceUpdate.selectionChanged
     )
@@ -221,11 +219,9 @@ void loop()
         }
     }
 
-
     // -------------------------------------------------------------------------
     // Maintenance action on release
     // -------------------------------------------------------------------------
-
     switch (
         maintenanceUpdate.action
     )
@@ -250,7 +246,6 @@ void loop()
                     millis()
                 );
             }
-
 
             break;
         }
@@ -282,7 +277,6 @@ void loop()
         }
     }
 
-
     // -------------------------------------------------------------------------
     // Receive CRSF bytes
     // -------------------------------------------------------------------------
@@ -300,7 +294,6 @@ void loop()
             crsfByte
         );
     }
-
 
     if (
         !bridgeState.hasReceiverBytes() &&
@@ -322,7 +315,6 @@ void loop()
         rawChannels =
             crsfDecoder.getChannels();
 
-
         channelNormalizer.update(
             rawChannels,
             normalizedChannels
@@ -343,7 +335,6 @@ void loop()
         crsfDecoder.clearNewChannels();
     }
 
-
     // -------------------------------------------------------------------------
     // Process Link Statistics
     // -------------------------------------------------------------------------
@@ -360,23 +351,64 @@ void loop()
         crsfDecoder.clearNewLinkStatistics();
     }
 
-
     // -------------------------------------------------------------------------
-    // Device Ping
+    // Device Ping -> Device Info
     //
-    // Recognition is implemented and covered by startup tests.
+    // This is the first live bidirectional CRSF proof-of-concept.
     //
-    // Live requests are deliberately consumed without generating
-    // a response during this checkpoint.
+    // CrsfDevice::buildDeviceInfoResponse() remains the single source of
+    // routing/filtering/encoding policy. It only creates a response when the
+    // ping is broadcast or is directly addressed to our experimental local
+    // CRSF node address.
+    //
+    // The experimental address/identity live in bridge_identity.h so this
+    // hardware test does not bury temporary protocol policy in main.cpp.
     // -------------------------------------------------------------------------
 
     if (
         crsfDecoder.hasDevicePing()
     )
     {
+        const CrsfDevicePing ping =
+            crsfDecoder.getDevicePing();
+
+
+        uint8_t response[
+            CrsfFrameEncoder::MAX_FRAME_SIZE
+        ] = {};
+
+        size_t responseLength = 0;
+
+
+        const CrsfDeviceIdentity identity =
+            BridgeIdentity::crsfDeviceIdentity();
+
+
+        CrsfDevice responseBuilder;
+
+
+        if (
+            responseBuilder.buildDeviceInfoResponse(
+                ping,
+                BridgeIdentity::CRSF_DEVICE_ADDRESS,
+                identity,
+                response,
+                sizeof(response),
+                responseLength
+            )
+        )
+        {
+            crsfUart.write(
+                response,
+                responseLength
+            );
+        }
+
+
+        // One incoming ping can produce at most one response attempt.
+        // Clear it whether it was addressed to us or intentionally ignored.
         crsfDecoder.clearDevicePing();
     }
-
 
     // -------------------------------------------------------------------------
     // Receiver timeout / failsafe
@@ -393,7 +425,6 @@ void loop()
             channelState
         );
     }
-
 
     // -------------------------------------------------------------------------
     // Status display arbitration
@@ -412,7 +443,6 @@ void loop()
     usbHid.update(
         channelState
     );
-
 
     delay(1);
 }
