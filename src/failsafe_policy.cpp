@@ -19,5 +19,19 @@ void FailsafePolicy::apply(
     state.yaw =
         NormalizedChannels::MID;
 
+
+    state.auxAnalog1 =
+        NormalizedChannels::MID;
+
+    state.auxAnalog2 =
+        NormalizedChannels::MID;
+
+    state.auxAnalog3 =
+        NormalizedChannels::MID;
+
+    state.auxAnalog4 =
+        NormalizedChannels::MID;
+
+
     state.buttons = 0;
 }

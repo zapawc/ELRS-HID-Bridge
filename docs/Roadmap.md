@@ -1,6 +1,6 @@
 # ELRS HID Bridge Roadmap
 
-**Status:** Active pre-v1.0 development  
+**Status:** Active v1.0 hardening  
 **Updated:** August 2026
 
 ## 1. Project Direction
@@ -111,14 +111,18 @@ Current failsafe trigger:
 Current documented failsafe:
 
 ```text
-Roll     center
-Pitch    center
-Yaw      center
-Throttle minimum
-Buttons  released
+Roll         center
+Pitch        center
+Yaw          center
+Throttle     minimum
+AUX Analog 1 center
+AUX Analog 2 center
+AUX Analog 3 center
+AUX Analog 4 center
+Buttons      released
 ```
 
-Auxiliary analog failsafe behavior still requires an explicit pre-v1.0 decision/test.
+This complete output policy is enforced by `FailsafePolicy` and covered by a deterministic startup self-test.
 
 ---
 
@@ -171,10 +175,10 @@ The first bidirectional feature is deliberately limited to identity discovery.
 - [x] isolate proof-of-concept bridge identity in `bridge_identity.h`
 - [x] wire Device Info construction to the live `CrsfUart::write()` path
 - [x] limit responses to broadcast/direct Device Ping traffic through the tested builder
-- [ ] validate RP2/Ranger/EdgeTX routing on hardware
-- [ ] confirm EdgeTX discovers `ELRS-HID-Bridge`
-- [ ] confirm 333 Hz Full RC-to-HID remains unaffected with live TX enabled
-- [ ] confirm receiver-loss failsafe and reconnect remain unchanged
+- [x] validate RP2/Ranger/EdgeTX routing on hardware
+- [x] confirm EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**
+- [x] confirm 333 Hz Full RC-to-HID remains unaffected with live TX enabled
+- [x] confirm receiver-loss failsafe and reconnect remain unchanged
 
 ### Still intentionally unresolved
 
@@ -185,24 +189,15 @@ The first bidirectional feature is deliberately limited to identity discovery.
 
 The current `0xC8` address and identity fields are proof-of-concept policy, not release ABI. The reusable Device Info builder still accepts caller-supplied address/identity values.
 
-### Immediate next development step
+### Proof-of-concept result
 
-Do not add more CRSF functionality yet. Validate the live Device Ping -> Device Info exchange on the actual RP2/Ranger/EdgeTX path.
+The live Device Ping -> Device Info exchange is proven on the reference RP2/Ranger/EdgeTX path. EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**, and normal 333 Hz Full/Liftoff operation remains unaffected.
 
-Success criteria:
-
-1. only intended Device Ping traffic generates a response,
-2. RP2/Ranger/EdgeTX routing is observed on real hardware,
-3. EdgeTX discovers `ELRS-HID-Bridge` or the observed behavior clearly identifies the remaining routing issue,
-4. 333 Hz Full RC-to-HID behavior remains unaffected,
-5. receiver-loss failsafe and reconnect remain unchanged,
-6. the result is documented before any address or protocol expansion.
-
-If discovery fails, inspect addressing/routing before changing architecture or inventing a proprietary address convention.
+The `0xC8` routing choice is therefore validated for the reference proof-of-concept. Final production identity/version values remain an explicit release-policy decision rather than a reason to expand protocol scope now.
 
 ### Scope stop
 
-If identity-only discovery succeeds, stop CRSF feature expansion for the v1.0 cycle.
+Identity-only discovery succeeded, so CRSF feature expansion stops for the v1.0 cycle.
 
 Do **not** immediately add:
 
@@ -226,9 +221,9 @@ The discovery proof-of-concept is valuable because it validates the bidirectiona
 - [x] automatic reconnection
 - [x] 8-axis HID profile implemented
 - [x] switch/button mapping implemented
-- [x] startup protocol self-tests
+- [x] startup protocol/failsafe self-tests
 - [x] RGB state behavior implemented
-- [ ] explicitly define/test AUX analog failsafe behavior
+- [x] explicitly define/test AUX analog failsafe behavior
 - [ ] final wiring guide validation
 - [ ] final EdgeTX setup guide validation
 - [ ] clean build from source on documented environment
@@ -498,6 +493,7 @@ commit/tag checkpoint
 - Throttle direction/range correct
 - Yaw direction/range correct
 - AUX analog axes behave as expected
+- all four AUX analog axes center on receiver-loss failsafe
 - switch mappings remain correct
 - transmitter-off causes failsafe within expected timeout
 - no stale button state remains after failsafe

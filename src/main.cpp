@@ -14,6 +14,7 @@
 #include "crsf_self_test.h"
 #include "crsf_uart.h"
 #include "failsafe_policy.h"
+#include "failsafe_policy_self_test.h"
 #include "maintenance_controller.h"
 #include "normalized_channels.h"
 #include "raw_channels.h"
@@ -97,7 +98,7 @@ void setup()
 
 
     // -------------------------------------------------------------------------
-    // Startup CRSF tests
+    // Startup self-tests
     //
     // Validate:
     //
@@ -105,13 +106,15 @@ void setup()
     // - outbound extended-frame construction
     // - Device Ping recognition
     // - Device Info response construction
+    // - complete failsafe output policy
     //
     // None of these startup tests transmit on the live CRSF UART.
     // -------------------------------------------------------------------------
     startupSelfTestsPassed =
         CrsfSelfTest::run() &&
         CrsfFrameEncoderSelfTest::run() &&
-        CrsfDeviceSelfTest::run();
+        CrsfDeviceSelfTest::run() &&
+        FailsafePolicySelfTest::run();
 
 
     if (!startupSelfTestsPassed)

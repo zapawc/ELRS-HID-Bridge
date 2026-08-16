@@ -16,7 +16,7 @@ No display, external pushbutton, custom PCB, custom USB driver, or mandatory com
 ## Project Status
 
 **Current Version:** 0.3  
-**Status:** Active pre-v1.0 development
+**Status:** Active v1.0 hardening
 
 The core wireless joystick path is functional and has been validated in Liftoff.
 
@@ -31,7 +31,7 @@ The core wireless joystick path is functional and has been validated in Liftoff.
 - USB HID joystick enumeration under Windows
 - eight conventional DirectInput analog axes
 - 32-button HID capacity
-- deterministic 500 ms RC timeout/failsafe
+- deterministic 500 ms RC timeout/failsafe across all HID controls
 - automatic recovery after transmitter reconnect
 - RGB status indication
 - onboard BOOT-button diagnostics/maintenance UI
@@ -39,22 +39,25 @@ The core wireless joystick path is functional and has been validated in Liftoff.
 - bidirectional/TX-capable CRSF UART abstraction
 - generic CRSF parser/dispatcher boundary
 - Device Ping (`0x28`) recognition
+- live Device Ping -> Device Info (`0x29`) discovery through RP2/Ranger/EdgeTX
 
 ### Current protocol checkpoint
 
-The first live bidirectional CRSF discovery experiment is now enabled. A valid Device Ping (`0x28`) can produce the already self-tested Parameter Device Information (`0x29`) response and send it through `CrsfUart::write()`.
+The identity-only bidirectional CRSF discovery proof-of-concept is hardware validated. A valid Device Ping (`0x28`) can produce the self-tested Parameter Device Information (`0x29`) response and send it through `CrsfUart::write()`.
 
-Current behavior:
+Validated behavior:
 
-- Device Info encoding remains covered by deterministic startup self-tests.
+- Device Info encoding is covered by deterministic startup self-tests.
 - Broadcast and directly addressed pings are eligible for a response.
 - Pings addressed to another CRSF device are ignored.
 - Each consumed ping can produce at most one Device Info response attempt.
-- The experimental local CRSF node address is `0xC8` (Flight Controller), matching the bridge's FC-side position on the RP2 UART.
-- The discovery identity is `ELRS-HID-Bridge` with zero CRSF parameters.
+- The experimental local CRSF node address `0xC8` (Flight Controller) successfully routes through RP2 -> ELRS RF -> Ranger -> EdgeTX.
+- EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**.
+- 333 Hz Full RC-to-HID operation and Liftoff performance remain normal with live CRSF TX enabled.
+- The discovery identity exposes zero CRSF parameters.
 - Proof-of-concept Serial/Hardware/Firmware ID fields are deterministic placeholders and are not yet release identity policy.
 
-The next protocol task is **hardware validation, not more protocol implementation**: determine whether the RP2/Ranger/EdgeTX path discovers `ELRS-HID-Bridge`, capture the observed routing behavior, and verify that 333 Hz Full RC-to-HID operation, failsafe, reconnect, and HID reporting remain unaffected.
+CRSF feature expansion is now frozen for the v1.0 cycle. The project is moving through release hardening rather than adding a parameter tree or other outbound protocol features.
 
 ---
 
@@ -200,14 +203,18 @@ Current trigger:
 Current failsafe:
 
 ```text
-Roll     center
-Pitch    center
-Yaw      center
-Throttle minimum
-Buttons  released
+Roll         center
+Pitch        center
+Yaw          center
+Throttle     minimum
+AUX Analog 1 center
+AUX Analog 2 center
+AUX Analog 3 center
+AUX Analog 4 center
+Buttons      released
 ```
 
-The current auxiliary-analog failsafe behavior still needs an explicit pre-v1.0 decision and regression test.
+`FailsafePolicy` explicitly assigns every HID control so no proportional or button state is retained accidentally after RC timeout. This behavior is covered by a deterministic startup self-test.
 
 Important observed behavior:
 
@@ -397,6 +404,7 @@ For control-path changes, validate at least:
 - Throttle direction/range
 - Yaw direction/range
 - AUX analog behavior
+- AUX analog axes center on failsafe
 - switch/button mapping
 - transmitter-off failsafe
 - no stale buttons after failsafe
@@ -430,11 +438,11 @@ Implemented:
 - live Device Info transmission for valid broadcast/direct pings
 - isolated proof-of-concept identity/address definition in `bridge_identity.h`
 
-Current hardware-validation items:
+Hardware validation completed:
 
-- confirm the experimental `0xC8` local address through the RP2/Ranger/EdgeTX path
-- confirm EdgeTX discovery of `ELRS-HID-Bridge`
-- verify live TX does not disturb the 333 Hz Full RC/HID path
+- experimental `0xC8` local address routes successfully through the RP2/Ranger/EdgeTX path
+- EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**
+- live TX does not disturb the 333 Hz Full RC/HID path or Liftoff behavior
 
 Not implemented yet:
 
@@ -442,7 +450,7 @@ Not implemented yet:
 - CRSF parameter tree
 - persistent configuration
 
-If the identity-only discovery experiment succeeds cleanly, full transmitter-side configuration remains post-v1.0 work unless there is a compelling reason to change scope.
+Identity-only discovery has succeeded cleanly. Full transmitter-side configuration remains post-v1.0 work; v1.0 now prioritizes deterministic failsafe behavior, documentation, reproducible builds, and release packaging.
 
 ---
 

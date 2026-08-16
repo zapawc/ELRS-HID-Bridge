@@ -460,14 +460,18 @@ Current trigger:
 Current documented behavior:
 
 ```text
-Roll       center
-Pitch      center
-Yaw        center
-Throttle   minimum
-Buttons    released
+Roll         center
+Pitch        center
+Yaw          center
+Throttle     minimum
+AUX Analog 1 center
+AUX Analog 2 center
+AUX Analog 3 center
+AUX Analog 4 center
+Buttons      released
 ```
 
-Auxiliary analog behavior still needs an explicit pre-v1.0 decision and test.
+Every HID output is explicitly assigned by `FailsafePolicy`; no proportional or button value is intentionally retained across RC timeout.
 
 When valid RC frames resume, live mapped control resumes automatically.
 
@@ -549,7 +553,8 @@ Current startup coverage includes:
 - CRSF receive parsing/decoding,
 - extended-frame construction,
 - Device Ping recognition,
-- Device Info response construction.
+- Device Info response construction,
+- complete failsafe output policy.
 
 The Device Info tests validate:
 
@@ -561,6 +566,14 @@ The Device Info tests validate:
 - big-endian identity fields,
 - CRSF length,
 - CRC.
+
+The failsafe policy test validates:
+
+- throttle minimum,
+- roll/pitch/yaw center,
+- all four AUX analog outputs center,
+- all buttons released,
+- repeated application is idempotent.
 
 None of these startup tests transmit on the live CRSF UART.
 
@@ -641,7 +654,7 @@ RP2 RX <- QT Py TX
 
 The transport and frame-encoding boundaries are now TX-capable.
 
-### 8.1 Current Device Discovery Proof-of-Concept
+### 8.1 Validated Device Discovery Proof-of-Concept
 
 Current state:
 
@@ -649,36 +662,36 @@ Current state:
 Device Ping received
       |
       v
-CrsfDevice recognizes routing
+CrsfDevice validates routing
       |
       v
-Device Info response can be constructed and self-tested
+Device Info response constructed
       |
-      X
-live UART transmission not yet enabled
+      v
+CrsfUart::write()
+      |
+      v
+RP2 -> ELRS RF -> Ranger -> EdgeTX
+      |
+      v
+ELRS-HID-Bridge appears under Other Devices
 ```
 
-The immediate next experiment is to:
+Hardware validation confirmed that this live TX path does not disturb normal 333 Hz Full RC-to-HID operation or Liftoff performance. Identity-only discovery therefore proves the bidirectional architecture without requiring a parameter tree for v1.0.
 
-1. select a temporary local CRSF device address/identity for bench use,
-2. expose the tested Device Info response to the production loop,
-3. send it only for valid Device Ping traffic,
-4. verify discovery through RP2 -> ELRS RF -> Ranger -> EdgeTX,
-5. verify RC-to-HID behavior remains unaffected.
-
-Do not build a parameter tree before the identity-only discovery path is proven.
+CRSF feature expansion is frozen for the v1.0 cycle.
 
 ### 8.2 Address/identity policy
 
-The protocol builder intentionally does not hard-code the bridge address or identity yet.
+The protocol builder intentionally does not hard-code the bridge address or identity. The proof-of-concept policy remains isolated in `bridge_identity.h`.
 
-The live discovery experiment must determine the routing semantics actually accepted by the reference RP2/Ranger/EdgeTX path before a permanent value is documented.
+The `0xC8` Flight Controller address is now validated as routable on the reference RP2/Ranger/EdgeTX path. It remains a proof-of-concept/release-policy choice rather than a globally unique bridge address assignment.
 
-This avoids creating a proprietary or arbitrary address convention merely to make a local test pass.
+Serial/Hardware/Firmware identity values are still deterministic placeholders and must be reviewed before public v1.0 release metadata is finalized.
 
 ### 8.3 Future CRSF configuration
 
-If discovery succeeds, future transmitter-side configuration may expose:
+With identity discovery proven, future transmitter-side configuration may expose:
 
 - channel/HID assignments,
 - axis inversion,

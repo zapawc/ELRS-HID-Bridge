@@ -26,7 +26,7 @@ Reference UART configuration:
 | `0x14` | Link Statistics | Decoded and used for diagnostics only |
 | `0x16` | RC Channels Packed | Decoded; primary HID control source |
 | `0x28` | Parameter Ping Devices / Device Ping | Recognized and routed to `CrsfDevice` |
-| `0x29` | Parameter Device Information / Device Info | Construction self-tested; live response TX enabled for discovery POC; hardware routing validation pending |
+| `0x29` | Parameter Device Information / Device Info | Construction self-tested; live response TX hardware validated through RP2/Ranger/EdgeTX |
 | `0x2B` | Parameter Settings Entry | Defined for future work; not implemented |
 | `0x2C` | Parameter Read | Defined for future work; not implemented |
 | `0x2D` | Parameter Write | Defined for future work; not implemented |
@@ -295,7 +295,19 @@ Parameter version   0
 
 `0xC8` was selected because the bridge occupies the flight-controller side of the RP2 UART. The three 32-bit identity values are deterministic proof-of-concept constants only; they are not claimed to be globally assigned identifiers and are not yet release identity policy.
 
-These values are isolated in `bridge_identity.h`. The generic construction layer still accepts caller-supplied address/identity data so hardware findings can change project policy without changing CRSF encoding mechanics.
+These values are isolated in `bridge_identity.h`. The generic construction layer still accepts caller-supplied address/identity data so project identity policy can change without changing CRSF encoding mechanics.
+
+Hardware validation result:
+
+```text
+RP2 -> ELRS RF -> Ranger -> EdgeTX
+                      |
+                      v
+          ELRS-HID-Bridge appears
+              under Other Devices
+```
+
+Normal 333 Hz Full RC-to-HID behavior and Liftoff performance remained unchanged with the live Device Info response path enabled.
 
 ---
 
@@ -356,7 +368,7 @@ The production firmware now uses the transmit primitive for exactly one purpose:
 
 No parameter entries, writes, commands, telemetry sensors, Bind/Wi-Fi commands, or other outbound CRSF behavior are enabled by this checkpoint.
 
-The next checkpoint is hardware observation: verify whether the RP2/Ranger/EdgeTX route carries the response and whether EdgeTX discovers `ELRS-HID-Bridge`.
+This boundary is hardware validated: the RP2/Ranger/EdgeTX path carries the response and EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**. No additional outbound CRSF feature is required for v1.0.
 
 ---
 
@@ -397,21 +409,24 @@ valid 0x14 received
 0x16 absent for 500 ms
     -> receiver timeout
     -> FailsafePolicy applied
+    -> throttle minimum
+    -> roll/pitch/yaw centered
+    -> AUX Analog 1-4 centered
+    -> all buttons released
 ```
 
-This separation is a core safety/maintainability rule.
+The complete failsafe output policy is covered by a deterministic startup self-test. This separation is a core safety/maintainability rule.
 
 ---
 
 ## 15. Planned Protocol Work
 
-Immediate:
+Pre-v1.0 protocol scope:
 
-1. build and flash the live Device Info TX checkpoint,
-2. verify RP2/Ranger/EdgeTX routing,
-3. look for `ELRS-HID-Bridge` through the ExpressLRS Lua `Other Devices` path,
-4. verify 333 Hz Full RC/HID/failsafe/reconnect behavior is unchanged,
-5. document the observed routing behavior before changing address policy or adding protocol features.
+- identity-only Device Ping -> Device Info discovery is complete and hardware validated,
+- no additional CRSF feature work is required for v1.0,
+- keep the successful discovery path stable while release hardening proceeds,
+- review final identity/version constants as part of release metadata policy.
 
 Post-v1.0 candidates:
 
@@ -422,4 +437,4 @@ Post-v1.0 candidates:
 - bridge health information
 - persistent configuration integration
 
-Do not build the full parameter system until identity-only discovery has been proven.
+Identity-only discovery is proven. Keep the full parameter system post-v1.0 unless a new release-blocking requirement emerges.
