@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include "boot_button.h"
 #include "bridge_configuration.h"
+#include "bridge_configuration_record_self_test.h"
+#include "bridge_configuration_store.h"
 #include "bridge_identity.h"
 #include "bridge_parameters.h"
 #include "bridge_state.h"
@@ -39,6 +41,10 @@ ChannelState channelState;
 
 BridgeConfiguration bridgeConfiguration =
     BridgeConfiguration::defaults();
+
+
+BridgeConfigurationStore
+    bridgeConfigurationStore;
 
 
 BridgeParameters bridgeParameters(
@@ -87,6 +93,19 @@ bool startupSelfTestsPassed = false;
 
 void setup()
 {
+    // -------------------------------------------------------------------------
+    // Persistent configuration
+    //
+    // bridgeConfiguration already contains known-good defaults. A missing,
+    // corrupt, incompatible, or otherwise invalid record is therefore a safe
+    // no-op.
+    // -------------------------------------------------------------------------
+
+    bridgeConfigurationStore.load(
+        bridgeConfiguration
+    );
+
+
     statusLed.begin(
         bridgeConfiguration
             .ledBrightnessPercent
@@ -118,6 +137,7 @@ void setup()
     // - Device Ping recognition
     // - Device Info response construction
     // - CRSF parameter read/write encoding
+    // - persistent configuration record validation/corruption rejection
     // - complete failsafe output policy
     // - canonical firmware version / CRSF Firmware ID consistency
     //
@@ -129,6 +149,7 @@ void setup()
         CrsfFrameEncoderSelfTest::run() &&
         CrsfDeviceSelfTest::run() &&
         CrsfParameterSelfTest::run() &&
+        BridgeConfigurationRecordSelfTest::run() &&
         FailsafePolicySelfTest::run() &&
         FirmwareVersionSelfTest::run();
 
@@ -473,8 +494,8 @@ void loop()
     // -------------------------------------------------------------------------
     // CRSF parameter writes
     //
-    // BridgeParameters validates and updates BridgeConfiguration and returns
-    // the application-side effect to perform. Persistence remains deferred.
+    // BridgeParameters validates and stages BridgeConfiguration changes.
+    // A successful write is acknowledged only after durable storage succeeds.
     // -------------------------------------------------------------------------
 
     if (
@@ -495,6 +516,13 @@ void loop()
         BridgeParameterWriteResult result;
 
 
+        // Keep a complete pre-write snapshot so persistence failure can be
+        // rolled back without exposing a runtime value that was never saved.
+        const BridgeConfiguration
+            previousConfiguration =
+                bridgeConfiguration;
+
+
         if (
             bridgeParameters
                 .handleWrite(
@@ -507,45 +535,64 @@ void loop()
                 )
         )
         {
-            switch (
-                result.change
+            if (
+                bridgeConfigurationStore
+                    .save(
+                        bridgeConfiguration
+                    )
             )
             {
-                case BridgeParameterChange::
-                    LedBrightness:
+                switch (
+                    result.change
+                )
                 {
-                    statusLed
-                        .setBrightnessPercent(
-                            result
-                                .ledBrightnessPercent
-                        );
+                    case BridgeParameterChange::
+                        LedBrightness:
+                    {
+                        statusLed
+                            .setBrightnessPercent(
+                                result
+                                    .ledBrightnessPercent
+                            );
 
-                    break;
+                        break;
+                    }
+
+
+                    case BridgeParameterChange::
+                        PitchInversion:
+                    {
+                        // ChannelMapper references BridgeConfiguration
+                        // directly. The persisted inversion setting is
+                        // therefore consumed on the next RC frame.
+
+                        break;
+                    }
+
+
+                    case BridgeParameterChange::None:
+                    {
+                        break;
+                    }
                 }
 
 
-                case BridgeParameterChange::
-                    PitchInversion:
-                {
-                    // ChannelMapper references BridgeConfiguration directly.
-                    // The new inversion setting is therefore consumed on the
-                    // next RC frame without an additional application action.
-
-                    break;
-                }
-
-
-                case BridgeParameterChange::None:
-                {
-                    break;
-                }
+                // Acknowledge only after persistence succeeds. This makes a
+                // successful CRSF write mean both runtime acceptance and
+                // durable storage.
+                crsfUart.write(
+                    response,
+                    responseLength
+                );
             }
-
-
-            crsfUart.write(
-                response,
-                responseLength
-            );
+            else
+            {
+                // Do not expose a runtime-only value when this checkpoint's
+                // contract is persistence. ChannelMapper continues to reference
+                // the same BridgeConfiguration object after assignment.
+                bridgeConfiguration =
+                    previousConfiguration;
+            }
         }
 
 

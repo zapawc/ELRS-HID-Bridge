@@ -1,149 +1,161 @@
-# ELRS-HID-Bridge — Post-v1.0 Checkpoint 4
+# ELRS-HID-Bridge — Post-v1.0 Checkpoint 5
 
 ## Intent
 
-Add one second real CRSF/EdgeTX configuration parameter using the parameter
-architecture validated in Checkpoint 3.
+## Compatibility correction
 
-New parameter:
+The first Checkpoint 5 package incorrectly targeted Mbed KVStore. The actual
+PlatformIO build uses `framework-arduinopico`, so this revision replaces only
+the persistence transport with the Arduino-Pico `EEPROM` API. The record schema,
+CRC validation, boot fallback, parameter behavior, and transactional
+acknowledgement logic are unchanged.
 
-**Pitch Inversion**
+Add persistent storage for the two CRSF-configurable settings already proven on
+hardware:
 
-Options:
+- LED Brightness
+- Pitch Inversion
 
-- `Normal`
-- `Inverted`
+This checkpoint does not add any new user-facing parameter.
 
-The current validated v1.0 behavior remains the default:
+## Storage architecture
 
-**Inverted**
+Persistence is deliberately split into two layers.
 
-This checkpoint remains runtime-only. Persistence is intentionally deferred.
+### BridgeConfigurationRecord
 
-## Why this parameter
+Pure serialization/validation logic.
 
-LED Brightness proved:
+It owns:
 
-CRSF FLOAT → BridgeConfiguration → hardware presentation
+- record magic,
+- schema version,
+- payload length,
+- persisted-field encoding,
+- CRC-32 generation/validation,
+- range validation,
+- safe decode behavior.
 
-Pitch Inversion now proves a different path:
+It has no flash or CRSF dependency.
 
-CRSF TEXT_SELECTION → BridgeConfiguration → HID mapping
+### BridgeConfigurationStore
 
-That exercises the parameter abstraction with a second CRSF data type and a
-different application subsystem without broadening scope.
+Storage transport only.
 
-## CRSF representation
+The project's actual PlatformIO toolchain uses Earle Philhower's Arduino-Pico
+core (`framework-arduinopico`), not ArduinoCore-mbed.
 
-Parameter list:
+Persistence therefore uses the Arduino-Pico `EEPROM` emulation API. The core
+reserves one 4 KiB flash sector at the end of RP2040 flash for EEPROM emulation.
+The bridge stores its 16-byte record beginning at EEPROM offset 0.
 
-- Parameter `0` — `ROOT`
-- Parameter `1` — `LED Brightness`
-- Parameter `2` — `Pitch Inversion`
+`EEPROM.begin(256)` uses the smallest supported working buffer. The core only
+marks the buffer dirty when a byte actually changes, so committing an unchanged
+record does not erase/program flash.
 
-`Pitch Inversion` uses standard CRSF `TEXT_SELECTION` (`0x09`).
+## Record schema v1
 
-Wire definition:
+Fixed length: 16 bytes
 
-- Name: `Pitch Inversion`
-- Options: `Normal;Inverted`
-- Value:
-  - `0` = Normal
-  - `1` = Inverted
-- Min: `0`
-- Max: `1`
-- Default: `1`
-- Unit: empty string
+Layout:
 
-TEXT_SELECTION writes use the standard one-byte selection index.
+- bytes 0–3: magic `EHB1`
+- byte 4: schema version = 1
+- byte 5: payload length = 2
+- byte 6: LED brightness, 0–100
+- byte 7: pitch inversion
+  - 0 = Normal
+  - 1 = Inverted
+- bytes 8–11: reserved, zero
+- bytes 12–15: CRC-32 over bytes 0–11
 
-Accepted writes are acknowledged with `0x2D` containing:
+Only the two real configurable settings are persisted.
 
-- parameter number
-- accepted one-byte selection index
+All other BridgeConfiguration fields continue to come from
+`BridgeConfiguration::defaults()`.
 
-## Runtime behavior
+## Boot behavior
 
-`BridgeConfiguration::pitch.inverted` is updated immediately.
+The global configuration object is still initialized from known-good defaults.
 
-`ChannelMapper` already references `BridgeConfiguration`, so no mapper rebuild
-or additional state synchronization is required. The changed inversion setting
-is used on the next decoded RC channel frame.
+During `setup()`:
 
-No other axis mapping changes.
+1. the bridge attempts to load the KVStore record,
+2. the record must pass exact-size, magic, schema, payload, value-range, and
+   CRC validation,
+3. only then are the persistent fields accepted,
+4. otherwise defaults remain untouched.
 
-## Default behavior
+The load occurs before `StatusLed::begin()`, so a stored brightness is applied
+from the first normal LED state.
 
-The bridge still boots with:
+## Write behavior
 
-`Pitch Inversion = Inverted`
+CRSF parameter writes are now transactional from the bridge's perspective.
 
-This preserves the previously hardware-validated HID orientation:
+1. Save a copy of the previous BridgeConfiguration.
+2. `BridgeParameters` validates and stages the requested change.
+3. The complete configuration record is written through Arduino-Pico EEPROM
+   emulation and committed to flash.
+4. Only if persistence succeeds:
+   - the application-side effect is applied,
+   - the CRSF `0x2D` acknowledgement is transmitted.
+5. If persistence fails:
+   - BridgeConfiguration is restored from the snapshot,
+   - no acknowledgement is sent,
+   - no new runtime value is exposed.
 
-- Roll — normal
-- Pitch — inverted
-- Throttle — normal
-- Yaw — normal
+This makes an acknowledged parameter write mean both runtime acceptance and
+durable storage.
 
-Merely flashing this checkpoint should therefore not change normal joystick
-behavior.
+## Flash-write frequency
 
-## Files changed
-
-- `src/crsf_device.h`
-- `src/crsf_device.cpp`
-- `src/bridge_parameters.h`
-- `src/bridge_parameters.cpp`
-- `src/main.cpp`
-- `src/crsf_parameter_self_test.cpp`
-
-## CRSF device additions
-
-`CrsfDevice` gains protocol-level helpers for:
-
-- TEXT_SELECTION parameter-entry construction
-- one-byte TEXT_SELECTION write acknowledgement
-
-Bridge-specific names/options/defaults remain in `BridgeParameters`.
-
-## Parameter architecture proof
-
-`BridgeParameters::PARAMETER_COUNT` increases from 1 to 2.
-
-Because Device Info already derives its count from `BridgeParameters`, no
-separate Device Info count edit is required.
-
-The root folder now advertises both parameters.
+The ExpressLRS Lua editor sends a parameter write when an edit is committed,
+not on every cursor increment. Storage writes therefore occur on explicit
+parameter changes, not continuously in the main loop.
 
 ## Self-test coverage
 
-Startup CRSF parameter tests now cover:
+A new startup self-test exercises the record codec without touching live flash:
 
-- parameter count = 2
-- root folder contains parameters 1 and 2
-- LED Brightness still produces a FLOAT entry
-- Pitch Inversion produces a TEXT_SELECTION entry
-- option text is `Normal;Inverted`
-- current/default selection is Inverted
-- valid write to Normal updates configuration and produces acknowledgement
-- valid write back to Inverted updates configuration and produces acknowledgement
-- invalid selection index is rejected without modifying configuration
-- wrong-address requests remain rejected
+- encode/decode round trip,
+- bad magic rejection,
+- schema mismatch rejection,
+- payload corruption / CRC rejection,
+- invalid value rejection,
+- wrong record-size rejection,
+- failed decode leaves the current configuration unchanged.
+
+The startup self-test does **not** erase, rewrite, or corrupt the real
+EEPROM-emulation flash sector.
+
+## Files added
+
+- `src/bridge_configuration_record.h`
+- `src/bridge_configuration_record.cpp`
+- `src/bridge_configuration_store.h`
+- `src/bridge_configuration_store.cpp`
+- `src/bridge_configuration_record_self_test.h`
+- `src/bridge_configuration_record_self_test.cpp`
+
+## Files changed
+
+- `src/main.cpp`
 
 ## Intentionally unchanged
 
-- LED Brightness behavior
-- ExpressLRS Lua r18 blank-unit workaround for LED Brightness
+- CRSF parameter definitions
+- LED Brightness range/type
+- ExpressLRS Lua r18 blank-unit workaround
+- Pitch Inversion options/default
 - channel assignments
-- all non-pitch axis orientation
-- switch/button mappings
-- receiver timeout
+- HID descriptors
 - failsafe policy
+- receiver timeout
 - Link Statistics behavior
 - BOOT-button behavior
-- USB descriptors
-- persistence
-- board support
+- telemetry
+- board portability
 - `pico_debug`
 - firmware semantic version
 
@@ -159,92 +171,97 @@ Use the established VS Code / PlatformIO workflow.
 
 ## Hardware test procedure
 
-### Baseline after flash
+### First boot after Checkpoint 5 flash
 
-1. Power the bridge normally.
-2. Link the transmitter.
-3. Confirm the normal green operational indication.
-4. Open `joy.cpl`.
-5. Confirm the existing validated pitch direction is unchanged after flash.
-6. Confirm all other axes and buttons still behave normally.
+Existing devices do not yet have a Checkpoint 5 configuration record in the
+Arduino-Pico EEPROM-emulation sector.
 
-### Parameter discovery
+Expected behavior:
 
-1. Open the ExpressLRS Lua script.
-2. Open `Other Devices`.
-3. Open `ELRS-HID-Bridge`.
-4. Confirm both parameters appear:
-   - `LED Brightness`
-   - `Pitch Inversion`
-5. Confirm `Pitch Inversion` initially displays `Inverted`.
+1. bridge boots normally,
+2. LED Brightness starts at 10,
+3. Pitch Inversion starts at Inverted,
+4. all HID behavior matches the prior validated checkpoint.
 
-### Pitch Inversion — Normal
+An erased/uninitialized EEPROM record fails magic/CRC validation and is treated
+exactly like "no saved configuration yet."
 
-1. Leave `joy.cpl` visible.
-2. Change `Pitch Inversion` from `Inverted` to `Normal`.
-3. Move the pitch stick.
-4. Confirm the HID Y-axis direction reverses immediately.
-5. Confirm Roll, Throttle, Yaw, auxiliary axes, and buttons are unchanged.
+### Persist both settings
 
-### Pitch Inversion — Inverted
+1. Open ExpressLRS → Other Devices → ELRS-HID-Bridge.
+2. Change LED Brightness to a distinctive value such as 50.
+3. Change Pitch Inversion to Normal.
+4. Confirm both changes take effect immediately.
+5. Close/reopen the device page and confirm both current values are still shown.
 
-1. Change `Pitch Inversion` back to `Inverted`.
-2. Move the pitch stick.
-3. Confirm the previously validated Y-axis direction is restored.
+### Power-cycle persistence
 
-### Existing LED parameter regression
+1. Disconnect USB power from the bridge.
+2. Reconnect it.
+3. Re-establish the ELRS link.
+4. Reopen ELRS-HID-Bridge.
+5. Confirm:
+   - LED Brightness is still 50,
+   - Pitch Inversion is still Normal.
+6. Open `joy.cpl`.
+7. Confirm the Y-axis still reflects Normal pitch orientation.
 
-1. Change LED Brightness to a visibly different value.
-2. Confirm the LED changes immediately.
-3. Confirm no Lua formatting error returns.
+### Change persisted values again
 
-### Volatile configuration
+1. Set LED Brightness to another value such as 25.
+2. Set Pitch Inversion back to Inverted.
+3. Power-cycle again.
+4. Confirm both new values survive the reboot.
 
-1. Set `Pitch Inversion` to `Normal`.
-2. Power-cycle the bridge.
-3. Reopen the bridge device page.
-4. Confirm `Pitch Inversion` returns to `Inverted`.
-5. Confirm `joy.cpl` again shows the validated inverted pitch orientation.
+This verifies overwrite/update behavior, not just the first record creation.
 
-This confirms persistence has not been introduced.
+### HID/failsafe regression
 
-### Failsafe regression
+1. Confirm all eight analog controls operate normally.
+2. Confirm all existing buttons remain correct.
+3. Turn the transmitter off.
+4. Confirm all analog controls neutralize and all buttons release.
+5. Turn the transmitter back on.
+6. Confirm automatic recovery.
+7. Confirm the persisted pitch orientation is still honored.
 
-1. Leave `joy.cpl` open with the transmitter linked.
-2. Turn the transmitter off.
-3. Confirm all eight analog controls neutralize and all buttons release.
-4. Turn the transmitter back on.
-5. Confirm automatic recovery.
-6. Confirm the currently selected runtime pitch inversion is honored after
-   recovery.
+## Corruption/fallback validation
+
+Do not intentionally damage live flash for this checkpoint.
+
+Corrupt-record and schema-mismatch behavior is exercised by
+`BridgeConfigurationRecordSelfTest` using in-memory records during startup.
+
+A real erased/uninitialized record is naturally exercised on the first
+Checkpoint 5 boot and must fall back to defaults.
+
+A future factory-reset/maintenance feature can provide a controlled way to
+invalidate/erase the stored record; that is intentionally outside this
+checkpoint.
 
 ## Success criteria
 
-Checkpoint 4 succeeds when:
+Checkpoint 5 succeeds when:
 
-- the normal `pico` build is clean,
+- normal `pico` build is clean,
 - startup self-tests pass,
-- both EdgeTX parameters are visible,
-- Pitch Inversion defaults to Inverted,
-- selecting Normal reverses only pitch,
-- selecting Inverted restores the validated orientation,
-- LED Brightness still works,
-- reboot restores Pitch Inversion to Inverted,
-- HID/failsafe behavior remains otherwise unchanged.
+- first boot without a record uses defaults,
+- both parameter values survive a full USB power cycle,
+- subsequent changes overwrite the stored record successfully,
+- LED and HID behavior remain correct,
+- receiver-loss failsafe and reconnection remain unchanged.
 
 ## Suggested commit
 
-`feat: add runtime pitch inversion parameter`
+`feat: persist bridge configuration`
 
 ## Next checkpoint
 
-If this passes, the parameter abstraction has been validated with:
+After validation, persistence is considered proven.
 
-- two real settings,
-- two CRSF parameter types,
-- two different application subsystems.
+The next design choice should be whether to add:
 
-At that point, persistent configuration becomes justified. The next design
-checkpoint should define the persistence schema, validation, corruption
-fallback, versioning, and reset-to-default behavior before adding more user
-settings.
+- a controlled Restore Defaults CRSF command, or
+- the next high-value configurable mapping parameter.
+
+Do not add schema migration logic until a schema-v2 requirement actually exists.
