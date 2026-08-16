@@ -12,6 +12,7 @@
 #include "failsafe_policy.h"
 #include "normalized_channels.h"
 #include "raw_channels.h"
+#include "status_display.h"
 #include "status_led.h"
 #include "usb_hid.h"
 
@@ -44,7 +45,13 @@ ChannelMapper channelMapper(
 FailsafePolicy failsafePolicy;
 
 UsbHid usbHid;
+
 StatusLed statusLed;
+
+StatusDisplay statusDisplay(
+    statusLed
+);
+
 BootButton bootButton;
 
 CrsfUart crsfUart;
@@ -54,61 +61,12 @@ BridgeState bridgeState;
 
 bool crsfSelfTestPassed = false;
 
-bool diagnosticDisplayActive = false;
-
-uint32_t diagnosticDisplayStartMs = 0;
-
-
-namespace
-{
-    constexpr uint32_t DIAGNOSTIC_DISPLAY_MS = 3000;
-
-
-    void restoreNormalLedState(
-        StatusLed& led,
-        const BridgeState& state
-    )
-    {
-        if (state.isReceiverLost())
-        {
-            led.setStatus(
-                SystemStatus::ReceiverLost
-            );
-
-            return;
-        }
-
-
-        if (state.hasRcFrames())
-        {
-            led.setStatus(
-                SystemStatus::ReceiverFrames
-            );
-
-            return;
-        }
-
-
-        if (state.hasReceiverBytes())
-        {
-            led.setStatus(
-                SystemStatus::ReceiverBytes
-            );
-
-            return;
-        }
-
-
-        led.setStatus(
-            SystemStatus::Ready
-        );
-    }
-}
-
 
 void setup()
 {
     statusLed.begin();
+    statusDisplay.reset();
+
     bootButton.begin();
 
     bridgeState.reset();
@@ -122,9 +80,7 @@ void setup()
 
     if (!crsfSelfTestPassed)
     {
-        statusLed.setStatus(
-            SystemStatus::Error
-        );
+        statusDisplay.showFatalError();
 
 
         failsafePolicy.apply(
@@ -141,11 +97,6 @@ void setup()
     }
 
 
-    statusLed.setStatus(
-        SystemStatus::Ready
-    );
-
-
     crsfUart.begin();
 
 
@@ -156,6 +107,14 @@ void setup()
 
     usbHid.update(
         channelState
+    );
+
+
+    // Transition from the startup indication to the current
+    // normal bridge state.
+    statusDisplay.update(
+        millis(),
+        bridgeState
     );
 }
 
@@ -183,14 +142,6 @@ void loop()
         BootButtonEvent::ShortPress
     )
     {
-        diagnosticDisplayActive =
-            true;
-
-
-        diagnosticDisplayStartMs =
-            millis();
-
-
         // Do not display stale RF health after the RC link has
         // already been declared lost.
 
@@ -199,21 +150,24 @@ void loop()
             !bridgeState.isReceiverLost()
         )
         {
-            statusLed.showLinkQuality(
+            statusDisplay.showLinkQuality(
                 bridgeState
                     .linkStatistics()
-                    .uplinkLinkQuality
+                    .uplinkLinkQuality,
+                millis()
             );
         }
         else
         {
-            statusLed.showDiagnosticUnavailable();
+            statusDisplay.showDiagnosticUnavailable(
+                millis()
+            );
         }
     }
 
 
-    // Long/very-long presses are reserved for future
-    // maintenance and factory-reset functions.
+    // Long/very-long presses remain reserved for future
+    // maintenance actions.
 
 
     // -------------------------------------------------------------------------
@@ -241,14 +195,6 @@ void loop()
     )
     {
         bridgeState.noteUartActivity();
-
-
-        if (!diagnosticDisplayActive)
-        {
-            statusLed.setStatus(
-                SystemStatus::ReceiverBytes
-            );
-        }
     }
 
 
@@ -277,14 +223,6 @@ void loop()
         bridgeState.noteRcFrame(
             millis()
         );
-
-
-        if (!diagnosticDisplayActive)
-        {
-            statusLed.setStatus(
-                SystemStatus::ReceiverFrames
-            );
-        }
 
 
         crsfDecoder.clearNewChannels();
@@ -322,46 +260,21 @@ void loop()
         failsafePolicy.apply(
             channelState
         );
-
-
-        // Receiver loss has higher priority than a
-        // temporary diagnostic display.
-
-        diagnosticDisplayActive =
-            false;
-
-
-        statusLed.setStatus(
-            SystemStatus::ReceiverLost
-        );
     }
 
 
     // -------------------------------------------------------------------------
-    // End temporary diagnostic display
+    // Status display
+    //
+    // StatusDisplay owns LED arbitration. Runtime code reports facts and
+    // requests temporary indications; it no longer decides which normal
+    // color should currently be displayed.
     // -------------------------------------------------------------------------
 
-    if (diagnosticDisplayActive)
-    {
-        const uint32_t now =
-            millis();
-
-
-        if (
-            (now - diagnosticDisplayStartMs) >=
-                DIAGNOSTIC_DISPLAY_MS
-        )
-        {
-            diagnosticDisplayActive =
-                false;
-
-
-            restoreNormalLedState(
-                statusLed,
-                bridgeState
-            );
-        }
-    }
+    statusDisplay.update(
+        millis(),
+        bridgeState
+    );
 
 
     // -------------------------------------------------------------------------
