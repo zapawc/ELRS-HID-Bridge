@@ -1,5 +1,4 @@
 #pragma once
-
 #include <stdint.h>
 #include "boot_button.h"
 
@@ -12,9 +11,8 @@ enum class MaintenanceSelection
     ReceiverReset,
 
     // Compatibility alias for the current main.cpp display dispatch.
-    // M1 keeps main.cpp unchanged; its legacy Cancel case now presents the
-    // reserved Receiver Reset/Recovery slot. This alias can be removed when
-    // command dispatch is added in a later checkpoint.
+    // Retained so this checkpoint can remain isolated to MaintenanceController;
+    // Wifi/ReceiverReset are no longer reachable selections.
     Cancel = ReceiverReset
 };
 
@@ -63,8 +61,10 @@ private:
     static constexpr uint32_t
         MAINTENANCE_STEP_MS = 2000;
 
+    // Current maintenance rotation:
+    //   Bind -> No Action / Cancel -> repeat.
     static constexpr uint32_t
-        MAINTENANCE_SLOT_COUNT = 4;
+        MAINTENANCE_SLOT_COUNT = 2;
 
     MaintenanceSelection currentSelection =
         MaintenanceSelection::None;

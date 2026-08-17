@@ -118,18 +118,6 @@ MaintenanceController::selectionForDuration(
         }
 
         case 1:
-        {
-            return
-                MaintenanceSelection::Wifi;
-        }
-
-        case 2:
-        {
-            return
-                MaintenanceSelection::ReceiverReset;
-        }
-
-        case 3:
         default:
         {
             // No Action / Cancel. Returning None causes StatusDisplay to resume
@@ -168,25 +156,13 @@ MaintenanceController::actionForDuration(
         }
 
         case MaintenanceSelection::Wifi:
-        {
-            return
-                MaintenanceAction::WifiRequested;
-        }
-
         case MaintenanceSelection::ReceiverReset:
-        {
-            // M1 reserves and displays this slot but intentionally does not
-            // create or transmit a receiver reset command. A legitimate
-            // ExpressLRS recovery mechanism must be verified first.
-            return
-                MaintenanceAction::None;
-        }
-
         case MaintenanceSelection::None:
         default:
         {
             // No Action / Cancel explicitly consumes the release without
-            // producing a maintenance action.
+            // producing a maintenance action. Wifi and ReceiverReset are kept
+            // only as compatibility enum values and are no longer selected.
             return
                 MaintenanceAction::None;
         }
