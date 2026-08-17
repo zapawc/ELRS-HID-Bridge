@@ -1,131 +1,37 @@
-# ELRS-HID-Bridge M2 — Receiver Bind
+# M3 Research Checkpoint — Receiver Wi-Fi
 
-## Intent
+## Result
 
-Implement the verified CRSF receiver Bind command behind the already validated M1 BOOT-button menu.
+M3 does **not** add a receiver Wi-Fi transmission command.
 
-M1 interaction remains unchanged:
+Authoritative ExpressLRS 3.4.3 source review found that receiver Wi-Fi mode is entered through the ExpressLRS-specific RF/MSP control path (`MSP_ELRS_SET_RX_WIFI_MODE = 0x0E`). The FC-side CRSF UART parser does not expose an equivalent supported Wi-Fi command.
 
-- short press: existing diagnostic
-- 2–4 s: Bind / blue
-- 4–6 s: Wi-Fi / white
-- 6–8 s: reserved Reset/Recovery / blinking red
-- 8–10 s: No Action / normal status
-- repeat while held
-
-Only **Bind** gains a live receiver command in M2.
+Per the project's standing rule, no command is fabricated or spoofed.
 
 ## Files
 
-Complete replacement / added files:
+### `README.md`
 
-- `src/main.cpp`
-- `src/crsf_receiver_command.h`
-- `src/crsf_receiver_command.cpp`
-- `src/crsf_receiver_command_self_test.h`
-- `src/crsf_receiver_command_self_test.cpp`
+Updates the BOOT-button documentation to the validated repeating 2-second menu, records M2 Bind as implemented, and adds the ExpressLRS 3.4+ Bind prerequisite with hardware validation on 3.4.3.
 
-No M1 state-machine/display files are changed.
+### `docs/Receiver-Maintenance-Protocol.md`
 
-## Verified CRSF Bind Frame
+Records the protocol research and current disposition for Bind, Wi-Fi, and the still-unresolved Reset/Recovery slot.
 
-The implementation follows the receiver Bind command supported by ExpressLRS 3.4+ and the known-good Betaflight `crsfRxBind()` vector:
+## Runtime impact
 
-```text
-C8 07 32 EC C8 10 01 9E E8
-```
+None. No source files are modified in this checkpoint.
 
-Meaning:
+The white Wi-Fi slot remains a non-transmitting reserved selection. Bind behavior remains unchanged from validated M2.
 
-- Sync: `0xC8`
-- Length: `0x07`
-- Type: `0x32` COMMAND
-- Destination: `0xEC` CRSF receiver
-- Origin: `0xC8` flight-controller side
-- Receiver command group: `0x10`
-- Bind subcommand: `0x01`
-- Command CRC8: `0x9E` (polynomial `0xBA`)
-- Packet CRC8: `0xE8` (standard CRSF polynomial `0xD5`)
+## Recommended validation
 
-`CrsfReceiverCommandSelfTest` independently checks the generated frame against that exact golden vector during startup. The self-test does not transmit.
+1. Overlay the ZIP at repository root.
+2. Confirm only documentation files changed.
+3. Review the compatibility wording.
+4. No firmware rebuild is required because runtime source is unchanged.
+5. Commit/sync this documentation checkpoint if desired.
 
-## ExpressLRS Version Requirement
+## Next decision
 
-Receiver-side support for this CRSF Bind command was added for **ExpressLRS 3.4**.
-
-If the test RP2 is still on ExpressLRS 3.3.1, update the receiver to 3.4 or newer before expecting M2 Bind to work. The bridge build itself does not require changing the transmitter firmware merely to compile this checkpoint.
-
-## Runtime Behavior
-
-On release during the blue Bind interval:
-
-1. `MaintenanceController` emits the existing `BindRequested` action.
-2. `CrsfReceiverCommand` constructs the verified command frame.
-3. `main.cpp` writes it once to the existing receiver-facing CRSF UART.
-4. Normal loop processing continues.
-
-No acknowledgement packet is invented or awaited. Hardware receiver behavior is the validation source.
-
-## Intentionally Unchanged
-
-- M1 2-second menu timing and repeat behavior
-- execute-on-release semantics
-- short-press diagnostic
-- Wi-Fi remains a no-op (M3)
-- red Reset/Recovery remains a no-op (M4 research)
-- No Action remains a no-op
-- RC timeout/failsafe semantics
-- HID mapping/orientation
-- configuration persistence
-- EdgeTX device menu
-- Diagnostics / Failsafe Count
-
-## Build / Test
-
-Use the normal `pico` environment in VS Code / PlatformIO.
-
-### Precondition
-
-Confirm the RP2 is running ExpressLRS 3.4+ before treating a no-response result as an M2 firmware failure.
-
-### M2 Bind test
-
-1. Power the bridge and establish normal ELRS control.
-2. Confirm normal HID operation first.
-3. Hold BOOT until the LED is blue (2–4 s).
-4. Release while blue.
-5. Verify the RP2 actually enters ExpressLRS binding mode.
-6. Verify normal recovery/rebinding procedure.
-7. Re-establish the normal link and confirm HID automatically resumes.
-
-### Safety / menu regression
-
-Verify:
-
-- short press still performs diagnostic only,
-- white Wi-Fi release does not trigger Bind,
-- blinking-red release does not trigger Bind or reset anything,
-- No Action release does nothing,
-- a continued hold still repeats the M1 menu correctly.
-
-### General regression
-
-After rebinding:
-
-- normal USB enumeration
-- `joy.cpl`
-- primary axes
-- auxiliary axes
-- buttons
-- EdgeTX device menu
-- persisted settings
-- transmitter-off failsafe
-- safe analog states / released buttons
-- automatic reconnect
-- Failsafe Count
-
-Check VS Code Problems before committing.
-
-## Commit Gate
-
-Commit M2 only after the real RP2 enters bind mode from BOOT Blue → Release and the regression checks pass.
+Return to architecture review for the Wi-Fi slot, or proceed to authoritative research on the Receiver Reset/Recovery slot before assigning another physical maintenance action.

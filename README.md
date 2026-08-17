@@ -251,25 +251,36 @@ The QT Py onboard BOOT button is used as a local diagnostic/maintenance interfac
 Current interaction model:
 
 ```text
-short click
-  -> acknowledge input
-  -> show current diagnostic state
-  -> return to normal state
+release before 2 s
+  -> short-press Link Quality diagnostic
 
-~2 s hold
-  -> Bind candidate
-  -> release to request action
+2-4 s
+  -> Bind / blue
+  -> release sends the supported CRSF receiver Bind command
 
-~5 s hold
-  -> Wi-Fi candidate
-  -> release to request action
+4-6 s
+  -> Wi-Fi / white
+  -> reserved; no receiver command is currently sent
+
+6-8 s
+  -> Receiver Reset/Recovery / blinking red
+  -> reserved; no receiver command is currently sent
+
+8-10 s
+  -> No Action / normal status indication
+  -> release does nothing
 
 continue holding
-  -> Cancel candidate
-  -> release with no maintenance action
+  -> repeat the 2-second Bind -> Wi-Fi -> Reset/Recovery -> No Action cycle
 ```
 
-The maintenance UI and LED-selection behavior are implemented, but receiver Bind and Wi-Fi commands are still reserved and do not currently send receiver commands.
+Maintenance actions execute only when BOOT is released. Crossing a selection threshold never executes the selected action.
+
+### Receiver maintenance firmware compatibility
+
+BOOT-button receiver Bind requires **ExpressLRS receiver firmware 3.4.0 or newer** because receiver-side handling of the CRSF Bind command was introduced in the ExpressLRS 3.4 line. The reference RadioMaster RP2 implementation has been hardware validated with **ExpressLRS 3.4.3**.
+
+The Wi-Fi selection remains reserved. ExpressLRS 3.4.3 defines `MSP_ELRS_SET_RX_WIFI_MODE` for its transmitter-to-receiver RF/MSP control path, but the receiver's FC-side CRSF UART parser does not expose an equivalent supported Wi-Fi maintenance command. The bridge therefore does not synthesize or spoof a Wi-Fi command. See `docs/Receiver-Maintenance-Protocol.md`.
 
 ---
 ## Firmware Architecture
