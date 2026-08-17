@@ -1,207 +1,142 @@
-# ELRS-HID-Bridge — Checkpoint 10: Diagnostics Folder
+# M1 — Repeating BOOT Maintenance Selection State Machine
 
 ## Intent
 
-Finish the current development session with a cleaner separation between:
+Implement only the physical BOOT-button maintenance-selection UI described in the 2026-08-17 coding handoff. No new CRSF receiver command is transmitted in this checkpoint.
 
-- user configuration,
-- bridge diagnostics,
-- future CRSF telemetry transport.
+## Replace these files
 
-This checkpoint removes the redundant `RC Link` INFO field and moves
-`Failsafe Count` into a dedicated `Diagnostics` folder.
+```text
+src/maintenance_controller.h
+src/maintenance_controller.cpp
+src/status_display.h
+src/status_display.cpp
+src/status_led.h
+src/status_led.cpp
+```
 
-No CRSF telemetry frames are added.
+`src/main.cpp` is intentionally unchanged in M1.
 
-## Root menu
+## New interaction
 
-Expected top-level device page:
+```text
+release < 2 s  -> existing short diagnostic
+2–4 s          -> Bind               / blue
+4–6 s          -> Wi-Fi              / white
+6–8 s          -> Receiver Reset     / blinking red
+8–10 s         -> No Action / Cancel / normal status
+10–12 s        -> Bind
+12–14 s        -> Wi-Fi
+14–16 s        -> Receiver Reset
+16–18 s        -> No Action / Cancel
+...repeat
+```
 
-1. LED Brightness
-2. Pitch Inversion
-3. Roll Inversion
-4. Yaw Inversion
-5. Aux 1 Inversion
-6. Aux 2 Inversion
-7. Aux 3 Inversion
-8. Aux 4 Inversion
-9. Diagnostics
-10. Restore Defaults
+Every maintenance interval is exactly two seconds. The four-slot menu repeats indefinitely while BOOT remains held.
 
-`Restore Defaults` remains last.
+## Safety behavior
 
-## Diagnostics folder
+- Selection changes while held.
+- Actions are evaluated only on release.
+- Release during No Action produces no action.
+- The Receiver Reset/Recovery slot is **presentation-only in M1** and produces no action on release.
+- No receiver-reset command is invented or transmitted.
+- Bind and Wi-Fi retain their existing reserved action events; the existing `main.cpp` still sends no receiver command for either.
 
-Opening `Diagnostics` should show:
+This means M1 cannot alter RP2 receiver configuration.
 
-- Failsafe Count
+## LED behavior
 
-That is the only diagnostic item in this checkpoint.
+- Bind: blue
+- Wi-Fi: white
+- Receiver Reset/Recovery: blinking red
+- No Action: current normal operational/status indication
 
-## Failsafe Count
+The red blink is non-blocking. `StatusDisplay::update()` advances the blink using `nowMs`; no multi-second `delay()` logic is introduced.
 
-Unchanged semantically.
+## Compatibility note
 
-It is a read-only CRSF `INFO` value derived from:
+To keep M1 isolated from the CRSF/application command path, `main.cpp` is unchanged. The existing `MaintenanceSelection::Cancel` and `showMaintenanceCancel()` names are retained as compatibility aliases/wrappers for the new Receiver Reset/Recovery presentation slot. The actual No Action interval is represented by `MaintenanceSelection::None`, which causes the existing main-loop display dispatch to call `clearMaintenance()` and restore normal status.
 
-`BridgeState::failsafeCount()`
+This compatibility shim should be removed when a later checkpoint deliberately modifies `main.cpp` to add verified receiver command dispatch.
 
-It increments when the existing RC timeout transitions the bridge into
-receiver-lost/failsafe state.
+## Build gate
 
-It does not increment continuously while the link remains lost.
+1. Overlay the ZIP contents at the repository root.
+2. In VS Code / PlatformIO select the normal `pico` environment.
+3. Build normally.
+4. Confirm no build errors.
+5. Confirm VS Code Problems contains no new issues.
+6. Upload normally.
 
-A recovered RC frame does not erase the count.
+Avoid `pico_debug` and routine direct `pio` CLI use.
 
-The count is runtime-only and resets on bridge reboot.
+## Hardware test — maintenance UI
 
-## Why RC Link was removed
+With normal RC/HID operation established:
 
-The transmitter/ExpressLRS environment already presents RF/control-link status
-directly.
+1. Short press and release before 2 seconds.
+   - Existing Link Quality diagnostic still appears.
+   - It returns automatically to normal status.
+2. Hold through 2 seconds.
+   - LED becomes blue.
+3. Continue through 4 seconds.
+   - LED becomes white.
+4. Continue through 6 seconds.
+   - LED begins blinking red.
+   - Confirm the bridge continues normal HID operation while it blinks.
+5. Continue through 8 seconds.
+   - Maintenance indication clears and normal operational/status LED returns.
+6. Continue through 10 seconds.
+   - Blue Bind selection returns.
+7. Continue through at least one additional complete cycle.
+   - Verify Blue -> White -> blinking Red -> normal/status repeats consistently.
+8. Release during No Action.
+   - Nothing executes.
+9. Release during the red slot.
+   - Nothing executes in M1; the RP2 must not reset or change configuration.
 
-Duplicating `RC Link` in the bridge device menu adds little diagnostic value,
-especially because the Lua device menu itself is unavailable while the radio
-link is down.
+## Regression gate
 
-Failsafe Count is different: after reconnection it provides a useful
-post-incident artifact showing that the bridge actually experienced one or more
-RC-channel timeout transitions.
+After the maintenance UI test, verify:
 
-## Why diagnostics stay out of telemetry
+- normal USB enumeration
+- `joy.cpl`
+- primary axes
+- auxiliary axes
+- buttons
+- current EdgeTX device menu
+- persisted configuration
+- transmitter-off failsafe
+- safe analog states
+- released buttons during failsafe
+- automatic reconnect
+- Failsafe Count behavior
 
-This project will not invent custom telemetry meanings or consume legitimate
-CRSF sensor channels for bridge-internal bookkeeping.
+A Liftoff smoke test is optional because M1 does not modify the control path, but it remains useful if anything unexpected is observed.
 
-The telemetry path remains architecturally available for future legitimate
-upstream telemetry, for example:
+## Intentionally unchanged
 
-Simulator/game
-    → USB or virtual serial
-    → ELRS-HID-Bridge
-    → standard CRSF telemetry
-    → ELRS
-    → EdgeTX
+- RC timeout semantics
+- failsafe policy
+- HID mappings
+- axis orientations
+- switch mappings
+- BridgeConfiguration persistence
+- CRSF parameter menu
+- Diagnostics folder
+- Throttle Inversion state
+- CRSF frame IDs/routing
+- receiver Bind command implementation
+- receiver Wi-Fi command implementation
+- receiver Reset/Recovery command implementation
 
-That allows a simulator to provide genuine values such as battery, GPS,
-temperature, RPM, or other data when those values naturally match standard CRSF
-telemetry semantics.
+## Commit gate
 
-## Parameter IDs
+Do not commit until the M1 hardware test and regression checks pass.
 
-- 1 — LED Brightness
-- 2 — Pitch Inversion
-- 3 — Roll Inversion
-- 4 — Yaw Inversion
-- 5 — Aux 1 Inversion
-- 6 — Aux 2 Inversion
-- 7 — Aux 3 Inversion
-- 8 — Aux 4 Inversion
-- 9 — Diagnostics folder
-- 10 — Failsafe Count
-- 11 — Restore Defaults
+Suggested commit after validation:
 
-Parameter count remains 11.
-
-The former RC Link ID 9 is reused as the Diagnostics folder because this work is
-still in the post-v1 development series and has not been released as a new
-compatibility contract.
-
-## Persistence
-
-Unchanged.
-
-- EEPROM schema remains v2.
-- Diagnostics are not persisted.
-- No configuration values are added or removed.
-- Restore Defaults behavior is unchanged.
-
-## Files changed
-
-- `src/bridge_parameters.h`
-- `src/bridge_parameters.cpp`
-- `src/crsf_parameter_self_test.cpp`
-
-All other files are carried forward complete from the validated Checkpoint 9
-revision.
-
-## Self-test coverage
-
-Startup parameter tests now verify:
-
-- parameter count remains 11,
-- root contains Diagnostics but not Failsafe Count directly,
-- Restore Defaults is last,
-- Diagnostics is a CRSF FOLDER,
-- Diagnostics contains Failsafe Count,
-- Failsafe Count parent is Diagnostics,
-- Failsafe Count remains INFO,
-- initial count is 0,
-- one receiver-loss transition reports 1,
-- recovery preserves the count,
-- diagnostics remain read-only,
-- existing Restore Defaults behavior remains valid.
-
-## Hardware test
-
-### Menu structure
-
-1. Build normal `pico`.
-2. Flash.
-3. Open ExpressLRS → Other Devices → ELRS-HID-Bridge.
-4. Confirm the root menu loads promptly.
-5. Confirm:
-   - `Diagnostics` appears near the bottom,
-   - `Failsafe Count` is no longer shown at root,
-   - `Restore Defaults` is last.
-6. Open Diagnostics.
-7. Confirm `Failsafe Count` appears inside.
-
-### Counter behavior
-
-1. Note Failsafe Count.
-2. Exit the device page if necessary.
-3. Turn the transmitter off long enough to trigger normal bridge failsafe.
-4. Turn the transmitter back on.
-5. Reconnect.
-6. Open Diagnostics.
-7. Confirm Failsafe Count increased by exactly one.
-
-### Regression
-
-Confirm:
-
-- LED Brightness still works and persists,
-- one inversion setting still works and persists,
-- Restore Defaults still confirms and persists defaults,
-- HID neutralizes during transmitter loss,
-- HID recovers after reconnection,
-- no long Lua parameter-loading pause returns.
-
-## Success criteria
-
-Checkpoint 10 passes when:
-
-- normal `pico` build is clean,
-- root menu loads promptly,
-- Diagnostics folder works,
-- only Failsafe Count appears inside it,
-- Restore Defaults remains last,
-- counter behavior remains correct,
-- existing configuration/persistence/HID/failsafe behavior remains unchanged.
-
-## Suggested commit
-
-`refactor: group bridge diagnostics`
-
-## Pause / handoff state
-
-This is intended as a clean pause point.
-
-After validation, the next development session should begin from the principle:
-
-- configuration belongs in the CRSF device menu,
-- bridge-specific troubleshooting data belongs under Diagnostics,
-- standard CRSF telemetry remains reserved for genuine telemetry semantics,
-- simulator-to-transmitter telemetry transport is a future architectural
-  opportunity rather than something to consume for internal bridge status.
+```text
+feat: add repeating BOOT maintenance selection cycle
+```

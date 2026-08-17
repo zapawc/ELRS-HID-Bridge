@@ -14,21 +14,18 @@ MaintenanceUpdate MaintenanceController::update(
 {
     MaintenanceUpdate result;
 
-
     // -------------------------------------------------------------------------
     // Button currently held
     //
-    // Continuously evaluate elapsed duration so selection changes occur
-    // while the user is holding the button rather than only after release.
+    // Continuously evaluate elapsed duration so selection changes occur while
+    // the user is holding the button. No action executes while held.
     // -------------------------------------------------------------------------
-
     if (button.pressed)
     {
         const MaintenanceSelection desiredSelection =
             selectionForDuration(
                 button.durationMs
             );
-
 
         if (
             desiredSelection !=
@@ -38,31 +35,27 @@ MaintenanceUpdate MaintenanceController::update(
             currentSelection =
                 desiredSelection;
 
-
             result.selectionChanged =
                 true;
         }
 
-
         result.selection =
             currentSelection;
-
 
         return result;
     }
 
-
     // -------------------------------------------------------------------------
     // Button released
+    //
+    // Release is the only event that can produce a maintenance action.
     // -------------------------------------------------------------------------
-
     if (button.releasedEvent)
     {
         result.action =
             actionForDuration(
                 button.durationMs
             );
-
 
         if (
             currentSelection !=
@@ -73,26 +66,20 @@ MaintenanceUpdate MaintenanceController::update(
                 true;
         }
 
-
         currentSelection =
             MaintenanceSelection::None;
-
 
         result.selection =
             MaintenanceSelection::None;
 
-
         return result;
     }
-
 
     // -------------------------------------------------------------------------
     // Idle
     // -------------------------------------------------------------------------
-
     result.selection =
         currentSelection;
-
 
     return result;
 }
@@ -104,37 +91,53 @@ MaintenanceController::selectionForDuration(
 ) const
 {
     if (
-        durationMs >=
-        CANCEL_THRESHOLD_MS
+        durationMs <
+        MAINTENANCE_START_MS
     )
     {
         return
-            MaintenanceSelection::Cancel;
+            MaintenanceSelection::None;
     }
 
+    const uint32_t slot =
+        (
+            (
+                durationMs -
+                MAINTENANCE_START_MS
+            ) /
+            MAINTENANCE_STEP_MS
+        ) %
+        MAINTENANCE_SLOT_COUNT;
 
-    if (
-        durationMs >=
-        WIFI_THRESHOLD_MS
-    )
+    switch (slot)
     {
-        return
-            MaintenanceSelection::Wifi;
+        case 0:
+        {
+            return
+                MaintenanceSelection::Bind;
+        }
+
+        case 1:
+        {
+            return
+                MaintenanceSelection::Wifi;
+        }
+
+        case 2:
+        {
+            return
+                MaintenanceSelection::ReceiverReset;
+        }
+
+        case 3:
+        default:
+        {
+            // No Action / Cancel. Returning None causes StatusDisplay to resume
+            // the current operational indication while the button remains held.
+            return
+                MaintenanceSelection::None;
+        }
     }
-
-
-    if (
-        durationMs >=
-        BIND_THRESHOLD_MS
-    )
-    {
-        return
-            MaintenanceSelection::Bind;
-    }
-
-
-    return
-        MaintenanceSelection::None;
 }
 
 
@@ -143,39 +146,49 @@ MaintenanceController::actionForDuration(
     uint32_t durationMs
 ) const
 {
-    // Cancel explicitly consumes the release without producing
-    // a maintenance action.
-
     if (
-        durationMs >=
-        CANCEL_THRESHOLD_MS
+        durationMs <
+        MAINTENANCE_START_MS
     )
     {
         return
-            MaintenanceAction::None;
+            MaintenanceAction::Diagnostic;
     }
 
-
-    if (
-        durationMs >=
-        WIFI_THRESHOLD_MS
+    switch (
+        selectionForDuration(
+            durationMs
+        )
     )
     {
-        return
-            MaintenanceAction::WifiRequested;
+        case MaintenanceSelection::Bind:
+        {
+            return
+                MaintenanceAction::BindRequested;
+        }
+
+        case MaintenanceSelection::Wifi:
+        {
+            return
+                MaintenanceAction::WifiRequested;
+        }
+
+        case MaintenanceSelection::ReceiverReset:
+        {
+            // M1 reserves and displays this slot but intentionally does not
+            // create or transmit a receiver reset command. A legitimate
+            // ExpressLRS recovery mechanism must be verified first.
+            return
+                MaintenanceAction::None;
+        }
+
+        case MaintenanceSelection::None:
+        default:
+        {
+            // No Action / Cancel explicitly consumes the release without
+            // producing a maintenance action.
+            return
+                MaintenanceAction::None;
+        }
     }
-
-
-    if (
-        durationMs >=
-        BIND_THRESHOLD_MS
-    )
-    {
-        return
-            MaintenanceAction::BindRequested;
-    }
-
-
-    return
-        MaintenanceAction::Diagnostic;
 }

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stdint.h>
 
 
@@ -20,48 +21,44 @@ public:
         uint8_t brightnessPercent
     );
 
-
     void setBrightnessPercent(
         uint8_t brightnessPercent
     );
 
-
     void setStatus(
         SystemStatus status
     );
-
 
     // Temporarily display Link Quality.
     void showLinkQuality(
         uint8_t linkQuality
     );
 
-
-    // Diagnostic request when valid statistics
-    // are not currently available.
+    // Diagnostic request when valid statistics are not currently available.
     void showDiagnosticUnavailable();
 
     // Maintenance-selection indications.
     void showMaintenanceBind();
     void showMaintenanceWifi();
-    void showMaintenanceCancel();
+    void showMaintenanceReset();
+    void showMaintenanceOff();
 
+    // Compatibility wrapper for the current main.cpp dispatch. During M1 the
+    // legacy Cancel display hook represents Receiver Reset/Recovery.
+    void showMaintenanceCancel();
 
 private:
     static uint8_t percentToNeoPixelBrightness(
         uint8_t brightnessPercent
     );
 
-
     void applyCurrentColor();
-
 
     void setColor(
         unsigned char red,
         unsigned char green,
         unsigned char blue
     );
-
 
     // Keep the unscaled logical color locally. Adafruit_NeoPixel brightness
     // changes rescale its internal pixel buffer; retaining the raw color lets
