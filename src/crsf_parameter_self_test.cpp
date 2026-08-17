@@ -172,9 +172,7 @@ namespace
             BridgeParameters::
                 AUX4_INVERSION_PARAMETER,
             BridgeParameters::
-                RC_LINK_INFO_PARAMETER,
-            BridgeParameters::
-                FAILSAFE_COUNT_INFO_PARAMETER,
+                DIAGNOSTICS_FOLDER_PARAMETER,
             BridgeParameters::
                 RESTORE_DEFAULTS_PARAMETER,
             0xFF
@@ -655,7 +653,7 @@ namespace
             configuration.roll.inverted;
     }
 
-    bool runRcLinkInfoTest()
+    bool runDiagnosticsFolderTest()
     {
         BridgeConfiguration configuration =
             BridgeConfiguration::defaults();
@@ -672,10 +670,6 @@ namespace
         );
 
 
-        uint8_t frame[64] = {};
-        size_t frameLength = 0;
-
-
         CrsfParameterRead request;
 
         request.destination =
@@ -686,12 +680,15 @@ namespace
 
         request.parameterNumber =
             BridgeParameters::
-                RC_LINK_INFO_PARAMETER;
+                DIAGNOSTICS_FOLDER_PARAMETER;
 
         request.chunkNumber = 0;
 
 
-        // Cold state => Waiting.
+        uint8_t frame[64] = {};
+        size_t frameLength = 0;
+
+
         if (
             !parameters.buildReadResponse(
                 request,
@@ -704,170 +701,44 @@ namespace
                 Crsf::FRAME_PARAMETER_SETTINGS_ENTRY ||
             frame[5] !=
                 BridgeParameters::
-                    RC_LINK_INFO_PARAMETER ||
+                    DIAGNOSTICS_FOLDER_PARAMETER ||
+            frame[7] !=
+                BridgeParameters::
+                    ROOT_PARAMETER ||
             frame[8] !=
-                Crsf::PARAMETER_TYPE_INFO
+                Crsf::PARAMETER_TYPE_FOLDER
         )
         {
             return false;
         }
 
 
-        // INFO body is "RC Link\0Waiting\0".
-        constexpr uint8_t expectedWaiting[] =
+        constexpr uint8_t expectedBody[] =
         {
-            'R','C',' ','L','i','n','k',0,
-            'W','a','i','t','i','n','g',0
-        };
-
-
-        for (
-            size_t index = 0;
-            index < sizeof(expectedWaiting);
-            ++index
-        )
-        {
-            if (
-                frame[9 + index] !=
-                expectedWaiting[index]
-            )
-            {
-                return false;
-            }
-        }
-
-
-        // One valid RC frame => Active.
-        state.noteRcFrame(
-            100
-        );
-
-        frameLength = 0;
-
-
-        if (
-            !parameters.buildReadResponse(
-                request,
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                frame,
-                sizeof(frame),
-                frameLength
-            )
-        )
-        {
-            return false;
-        }
-
-
-        constexpr uint8_t expectedActive[] =
-        {
-            'R','C',' ','L','i','n','k',0,
-            'A','c','t','i','v','e',0
-        };
-
-
-        for (
-            size_t index = 0;
-            index < sizeof(expectedActive);
-            ++index
-        )
-        {
-            if (
-                frame[9 + index] !=
-                expectedActive[index]
-            )
-            {
-                return false;
-            }
-        }
-
-
-        // RC timeout => Lost.
-        if (
-            !state.updateRcTimeout(
-                700,
-                500
-            )
-        )
-        {
-            return false;
-        }
-
-
-        frameLength = 0;
-
-
-        if (
-            !parameters.buildReadResponse(
-                request,
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                frame,
-                sizeof(frame),
-                frameLength
-            )
-        )
-        {
-            return false;
-        }
-
-
-        constexpr uint8_t expectedLost[] =
-        {
-            'R','C',' ','L','i','n','k',0,
-            'L','o','s','t',0
-        };
-
-
-        for (
-            size_t index = 0;
-            index < sizeof(expectedLost);
-            ++index
-        )
-        {
-            if (
-                frame[9 + index] !=
-                expectedLost[index]
-            )
-            {
-                return false;
-            }
-        }
-
-
-        // INFO is read-only.
-        CrsfParameterWrite writeRequest;
-
-        writeRequest.destination =
-            Crsf::ADDRESS_FLIGHT_CONTROLLER;
-
-        writeRequest.origin =
-            Crsf::ADDRESS_REMOTE_CONTROL;
-
-        writeRequest.parameterNumber =
+            'D','i','a','g','n','o','s','t','i','c','s',0,
             BridgeParameters::
-                RC_LINK_INFO_PARAMETER;
-
-        writeRequest.dataLength = 1;
-        writeRequest.data[0] = 1;
-
-
-        BridgeParameterWriteResult result;
-
-        frameLength = 123;
+                FAILSAFE_COUNT_INFO_PARAMETER,
+            0xFF
+        };
 
 
-        return
-            !parameters.handleWrite(
-                writeRequest,
-                Crsf::ADDRESS_FLIGHT_CONTROLLER,
-                frame,
-                sizeof(frame),
-                frameLength,
-                result
-            ) &&
-            frameLength == 0 &&
-            result.change ==
-                BridgeParameterChange::None;
+        for (
+            size_t index = 0;
+            index < sizeof(expectedBody);
+            ++index
+        )
+        {
+            if (
+                frame[9 + index] !=
+                expectedBody[index]
+            )
+            {
+                return false;
+            }
+        }
+
+
+        return true;
     }
 
 
@@ -918,6 +789,9 @@ namespace
             frame[5] !=
                 BridgeParameters::
                     FAILSAFE_COUNT_INFO_PARAMETER ||
+            frame[7] !=
+                BridgeParameters::
+                    DIAGNOSTICS_FOLDER_PARAMETER ||
             frame[8] !=
                 Crsf::PARAMETER_TYPE_INFO
         )
@@ -1038,7 +912,7 @@ bool CrsfParameterSelfTest::run()
         runRootFolderResponseTest() &&
         runAllInversionEntriesTest() &&
         runAllInversionWritesTest() &&
-        runRcLinkInfoTest() &&
+        runDiagnosticsFolderTest() &&
         runFailsafeCountInfoTest() &&
         runRestoreDefaultsRegressionTest();
 }

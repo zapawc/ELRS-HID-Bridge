@@ -60,7 +60,7 @@ public:
 
     static constexpr uint8_t AUX4_INVERSION_PARAMETER = 8;
 
-    static constexpr uint8_t RC_LINK_INFO_PARAMETER = 9;
+    static constexpr uint8_t DIAGNOSTICS_FOLDER_PARAMETER = 9;
 
     static constexpr uint8_t FAILSAFE_COUNT_INFO_PARAMETER = 10;
 

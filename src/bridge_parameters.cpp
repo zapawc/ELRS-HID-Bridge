@@ -203,8 +203,7 @@ bool BridgeParameters::buildReadResponse(
                 AUX2_INVERSION_PARAMETER,
                 AUX3_INVERSION_PARAMETER,
                 AUX4_INVERSION_PARAMETER,
-                RC_LINK_INFO_PARAMETER,
-                FAILSAFE_COUNT_INFO_PARAMETER,
+                DIAGNOSTICS_FOLDER_PARAMETER,
                 RESTORE_DEFAULTS_PARAMETER
             };
 
@@ -268,33 +267,24 @@ bool BridgeParameters::buildReadResponse(
         }
 
 
-        case RC_LINK_INFO_PARAMETER:
+        case DIAGNOSTICS_FOLDER_PARAMETER:
         {
-            const char* value =
-                "Waiting";
-
-
-            if (
-                bridgeState != nullptr &&
-                bridgeState->hasRcFrames()
-            )
+            constexpr uint8_t children[] =
             {
-                value =
-                    bridgeState->isReceiverLost()
-                        ? "Lost"
-                        : "Active";
-            }
+                FAILSAFE_COUNT_INFO_PARAMETER
+            };
 
 
             return
                 responseBuilder
-                    .buildInfoParameterResponse(
+                    .buildFolderParameterResponse(
                         request,
                         localAddress,
-                        RC_LINK_INFO_PARAMETER,
+                        DIAGNOSTICS_FOLDER_PARAMETER,
                         ROOT_PARAMETER,
-                        "RC Link",
-                        value,
+                        "Diagnostics",
+                        children,
+                        sizeof(children),
                         output,
                         outputCapacity,
                         outputLength
@@ -329,7 +319,7 @@ bool BridgeParameters::buildReadResponse(
                         request,
                         localAddress,
                         FAILSAFE_COUNT_INFO_PARAMETER,
-                        ROOT_PARAMETER,
+                        DIAGNOSTICS_FOLDER_PARAMETER,
                         "Failsafe Count",
                         value,
                         output,
@@ -839,10 +829,10 @@ bool BridgeParameters::handleWrite(
         }
 
 
-        case RC_LINK_INFO_PARAMETER:
+        case DIAGNOSTICS_FOLDER_PARAMETER:
         case FAILSAFE_COUNT_INFO_PARAMETER:
         {
-            // INFO parameters are read-only.
+            // FOLDER and INFO parameters are read-only.
             return false;
         }
 
