@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
+#include <string.h>
 #include "bridge_configuration.h"
 #include "bridge_parameters.h"
 #include "crsf_protocol.h"
@@ -82,7 +82,6 @@ namespace
 
         size_t index = 9;
 
-
         while (
             index < frameLength &&
             frame[index] != 0
@@ -104,8 +103,59 @@ namespace
         status =
             frame[index + 1];
 
-
         return true;
+    }
+
+
+    bool frameNameEquals(
+        const uint8_t* frame,
+        size_t frameLength,
+        const char* expected
+    )
+    {
+        if (
+            frame == nullptr ||
+            expected == nullptr ||
+            frameLength <= 9
+        )
+        {
+            return false;
+        }
+
+
+        const size_t expectedLength =
+            strlen(expected);
+
+        if (
+            9 + expectedLength >=
+            frameLength
+        )
+        {
+            return false;
+        }
+
+
+        for (
+            size_t index = 0;
+            index < expectedLength;
+            ++index
+        )
+        {
+            if (
+                frame[9 + index] !=
+                    static_cast<uint8_t>(
+                        expected[index]
+                    )
+            )
+            {
+                return false;
+            }
+        }
+
+
+        return
+            frame[9 + expectedLength] ==
+                0;
     }
 
 
@@ -155,26 +205,40 @@ namespace
         constexpr uint8_t expectedTail[] =
         {
             'R', 'O', 'O', 'T', 0,
+
             BridgeParameters::
                 LED_BRIGHTNESS_PARAMETER,
+
             BridgeParameters::
                 PITCH_INVERSION_PARAMETER,
+
+            BridgeParameters::
+                THROTTLE_INVERSION_PARAMETER,
+
             BridgeParameters::
                 ROLL_INVERSION_PARAMETER,
+
             BridgeParameters::
                 YAW_INVERSION_PARAMETER,
+
             BridgeParameters::
                 AUX1_INVERSION_PARAMETER,
+
             BridgeParameters::
                 AUX2_INVERSION_PARAMETER,
+
             BridgeParameters::
                 AUX3_INVERSION_PARAMETER,
+
             BridgeParameters::
                 AUX4_INVERSION_PARAMETER,
+
             BridgeParameters::
                 DIAGNOSTICS_FOLDER_PARAMETER,
+
             BridgeParameters::
                 RESTORE_DEFAULTS_PARAMETER,
+
             0xFF
         };
 
@@ -187,7 +251,7 @@ namespace
         {
             if (
                 frame[9 + index] !=
-                expectedTail[index]
+                    expectedTail[index]
             )
             {
                 return false;
@@ -200,7 +264,8 @@ namespace
 
 
     bool runInversionEntryTest(
-        uint8_t parameterNumber
+        uint8_t parameterNumber,
+        const char* expectedName
     )
     {
         BridgeConfiguration configuration =
@@ -229,7 +294,12 @@ namespace
             frame[5] ==
                 parameterNumber &&
             frame[8] ==
-                Crsf::PARAMETER_TYPE_TEXT_SELECTION;
+                Crsf::PARAMETER_TYPE_TEXT_SELECTION &&
+            frameNameEquals(
+                frame,
+                frameLength,
+                expectedName
+            );
     }
 
 
@@ -238,31 +308,43 @@ namespace
         return
             runInversionEntryTest(
                 BridgeParameters::
-                    PITCH_INVERSION_PARAMETER
+                    PITCH_INVERSION_PARAMETER,
+                "Pitch Inversion"
             ) &&
             runInversionEntryTest(
                 BridgeParameters::
-                    ROLL_INVERSION_PARAMETER
+                    THROTTLE_INVERSION_PARAMETER,
+                "Throttle Invert"
             ) &&
             runInversionEntryTest(
                 BridgeParameters::
-                    YAW_INVERSION_PARAMETER
+                    ROLL_INVERSION_PARAMETER,
+                "Roll Inversion"
             ) &&
             runInversionEntryTest(
                 BridgeParameters::
-                    AUX1_INVERSION_PARAMETER
+                    YAW_INVERSION_PARAMETER,
+                "Yaw Inversion"
             ) &&
             runInversionEntryTest(
                 BridgeParameters::
-                    AUX2_INVERSION_PARAMETER
+                    AUX1_INVERSION_PARAMETER,
+                "Aux 1 Inversion"
             ) &&
             runInversionEntryTest(
                 BridgeParameters::
-                    AUX3_INVERSION_PARAMETER
+                    AUX2_INVERSION_PARAMETER,
+                "Aux 2 Inversion"
             ) &&
             runInversionEntryTest(
                 BridgeParameters::
-                    AUX4_INVERSION_PARAMETER
+                    AUX3_INVERSION_PARAMETER,
+                "Aux 3 Inversion"
+            ) &&
+            runInversionEntryTest(
+                BridgeParameters::
+                    AUX4_INVERSION_PARAMETER,
+                "Aux 4 Inversion"
             );
     }
 
@@ -327,6 +409,20 @@ namespace
                 0
             ) ||
             configuration.pitch.inverted
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !applyInversionWrite(
+                parameters,
+                BridgeParameters::
+                    THROTTLE_INVERSION_PARAMETER,
+                1
+            ) ||
+            !configuration.throttle.inverted
         )
         {
             return false;
@@ -420,6 +516,7 @@ namespace
         // Invalid selection must not modify the current setting.
         uint8_t response[64] = {};
         size_t responseLength = 123;
+
         BridgeParameterWriteResult result;
 
 
@@ -427,7 +524,7 @@ namespace
             parameters.handleWrite(
                 makeWrite(
                     BridgeParameters::
-                        ROLL_INVERSION_PARAMETER,
+                        THROTTLE_INVERSION_PARAMETER,
                     2
                 ),
                 Crsf::ADDRESS_FLIGHT_CONTROLLER,
@@ -443,7 +540,7 @@ namespace
 
 
         return
-            configuration.roll.inverted &&
+            configuration.throttle.inverted &&
             responseLength == 0 &&
             result.change ==
                 BridgeParameterChange::None;
@@ -467,6 +564,18 @@ namespace
         configuration.throttle.inverted =
             true;
 
+        configuration.yaw.inverted =
+            true;
+
+        configuration.auxAnalog1.inverted =
+            true;
+
+        configuration.auxAnalog2.inverted =
+            true;
+
+        configuration.auxAnalog3.inverted =
+            true;
+
         configuration.auxAnalog4.inverted =
             true;
 
@@ -478,6 +587,7 @@ namespace
 
         uint8_t response[64] = {};
         size_t responseLength = 0;
+
         BridgeParameterWriteResult result;
 
 
@@ -607,7 +717,7 @@ namespace
 
 
         // Re-establish a non-default value and prove cancel does not reset it.
-        configuration.roll.inverted =
+        configuration.throttle.inverted =
             true;
 
 
@@ -650,8 +760,9 @@ namespace
 
 
         return
-            configuration.roll.inverted;
+            configuration.throttle.inverted;
     }
+
 
     bool runDiagnosticsFolderTest()
     {
@@ -716,8 +827,10 @@ namespace
         constexpr uint8_t expectedBody[] =
         {
             'D','i','a','g','n','o','s','t','i','c','s',0,
+
             BridgeParameters::
                 FAILSAFE_COUNT_INFO_PARAMETER,
+
             0xFF
         };
 
@@ -730,7 +843,7 @@ namespace
         {
             if (
                 frame[9 + index] !=
-                expectedBody[index]
+                    expectedBody[index]
             )
             {
                 return false;
@@ -800,7 +913,6 @@ namespace
         }
 
 
-        // INFO body: "Failsafe Count\0" + "0\0"
         constexpr uint8_t expectedZero[] =
         {
             'F','a','i','l','s','a','f','e',' ',
@@ -817,7 +929,7 @@ namespace
         {
             if (
                 frame[9 + index] !=
-                expectedZero[index]
+                    expectedZero[index]
             )
             {
                 return false;
@@ -874,7 +986,7 @@ namespace
         {
             if (
                 frame[9 + index] !=
-                expectedOne[index]
+                    expectedOne[index]
             )
             {
                 return false;
@@ -901,14 +1013,13 @@ namespace
             ) &&
             frame[9 + 15] == '1';
     }
-
 }
 
 
 bool CrsfParameterSelfTest::run()
 {
     return
-        BridgeParameters::PARAMETER_COUNT == 11 &&
+        BridgeParameters::PARAMETER_COUNT == 12 &&
         runRootFolderResponseTest() &&
         runAllInversionEntriesTest() &&
         runAllInversionWritesTest() &&

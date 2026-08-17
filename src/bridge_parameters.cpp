@@ -1,7 +1,6 @@
 #include "bridge_parameters.h"
 
 #include <stdio.h>
-
 #include "crsf_protocol.h"
 
 
@@ -24,7 +23,6 @@ void BridgeParameters::attachBridgeState(
         &state;
 }
 
-
 bool BridgeParameters::buildInversionParameterResponse(
     const CrsfParameterRead& request,
     uint8_t localAddress,
@@ -38,7 +36,6 @@ bool BridgeParameters::buildInversionParameterResponse(
 ) const
 {
     CrsfDevice responseBuilder;
-
 
     return
         responseBuilder
@@ -64,7 +61,6 @@ bool BridgeParameters::buildInversionParameterResponse(
             );
 }
 
-
 bool BridgeParameters::handleInversionWrite(
     const CrsfParameterWrite& request,
     uint8_t localAddress,
@@ -87,7 +83,6 @@ bool BridgeParameters::handleInversionWrite(
 
     const uint8_t selection =
         request.data[0];
-
 
     if (
         selection != AXIS_NORMAL &&
@@ -117,7 +112,6 @@ bool BridgeParameters::handleInversionWrite(
         return false;
     }
 
-
     mapping.inverted =
         selection ==
         AXIS_INVERTED;
@@ -136,7 +130,6 @@ bool BridgeParameters::handleInversionWrite(
     return true;
 }
 
-
 bool BridgeParameters::buildRestoreDefaultsResponse(
     uint8_t destination,
     uint8_t origin,
@@ -149,7 +142,6 @@ bool BridgeParameters::buildRestoreDefaultsResponse(
 ) const
 {
     CrsfDevice responseBuilder;
-
 
     return
         responseBuilder
@@ -169,7 +161,6 @@ bool BridgeParameters::buildRestoreDefaultsResponse(
             );
 }
 
-
 bool BridgeParameters::buildReadResponse(
     const CrsfParameterRead& request,
     uint8_t localAddress,
@@ -186,7 +177,6 @@ bool BridgeParameters::buildReadResponse(
     const BridgeConfiguration defaults =
         BridgeConfiguration::defaults();
 
-
     switch (
         request.parameterNumber
     )
@@ -197,6 +187,7 @@ bool BridgeParameters::buildReadResponse(
             {
                 LED_BRIGHTNESS_PARAMETER,
                 PITCH_INVERSION_PARAMETER,
+                THROTTLE_INVERSION_PARAMETER,
                 ROLL_INVERSION_PARAMETER,
                 YAW_INVERSION_PARAMETER,
                 AUX1_INVERSION_PARAMETER,
@@ -206,7 +197,6 @@ bool BridgeParameters::buildReadResponse(
                 DIAGNOSTICS_FOLDER_PARAMETER,
                 RESTORE_DEFAULTS_PARAMETER
             };
-
 
             return
                 responseBuilder
@@ -223,7 +213,6 @@ bool BridgeParameters::buildReadResponse(
                         outputLength
                     );
         }
-
 
         case LED_BRIGHTNESS_PARAMETER:
         {
@@ -249,7 +238,6 @@ bool BridgeParameters::buildReadResponse(
                     );
         }
 
-
         case PITCH_INVERSION_PARAMETER:
         {
             return
@@ -266,6 +254,21 @@ bool BridgeParameters::buildReadResponse(
                 );
         }
 
+        case THROTTLE_INVERSION_PARAMETER:
+        {
+            return
+                buildInversionParameterResponse(
+                    request,
+                    localAddress,
+                    THROTTLE_INVERSION_PARAMETER,
+                    "Throttle Invert",
+                    configuration.throttle,
+                    defaults.throttle.inverted,
+                    output,
+                    outputCapacity,
+                    outputLength
+                );
+        }
 
         case DIAGNOSTICS_FOLDER_PARAMETER:
         {
@@ -273,7 +276,6 @@ bool BridgeParameters::buildReadResponse(
             {
                 FAILSAFE_COUNT_INFO_PARAMETER
             };
-
 
             return
                 responseBuilder
@@ -290,7 +292,6 @@ bool BridgeParameters::buildReadResponse(
                         outputLength
                     );
         }
-
 
         case FAILSAFE_COUNT_INFO_PARAMETER:
         {
@@ -312,7 +313,6 @@ bool BridgeParameters::buildReadResponse(
                 )
             );
 
-
             return
                 responseBuilder
                     .buildInfoParameterResponse(
@@ -328,7 +328,6 @@ bool BridgeParameters::buildReadResponse(
                     );
         }
 
-
         case RESTORE_DEFAULTS_PARAMETER:
         {
             if (
@@ -337,7 +336,6 @@ bool BridgeParameters::buildReadResponse(
             {
                 return false;
             }
-
 
             return
                 buildRestoreDefaultsResponse(
@@ -356,7 +354,6 @@ bool BridgeParameters::buildReadResponse(
                 );
         }
 
-
         case ROLL_INVERSION_PARAMETER:
         {
             return
@@ -372,7 +369,6 @@ bool BridgeParameters::buildReadResponse(
                     outputLength
                 );
         }
-
 
         case YAW_INVERSION_PARAMETER:
         {
@@ -390,7 +386,6 @@ bool BridgeParameters::buildReadResponse(
                 );
         }
 
-
         case AUX1_INVERSION_PARAMETER:
         {
             return
@@ -406,7 +401,6 @@ bool BridgeParameters::buildReadResponse(
                     outputLength
                 );
         }
-
 
         case AUX2_INVERSION_PARAMETER:
         {
@@ -424,7 +418,6 @@ bool BridgeParameters::buildReadResponse(
                 );
         }
 
-
         case AUX3_INVERSION_PARAMETER:
         {
             return
@@ -441,7 +434,6 @@ bool BridgeParameters::buildReadResponse(
                 );
         }
 
-
         case AUX4_INVERSION_PARAMETER:
         {
             return
@@ -457,7 +449,6 @@ bool BridgeParameters::buildReadResponse(
                     outputLength
                 );
         }
-
 
         default:
         {
@@ -490,7 +481,6 @@ bool BridgeParameters::handleWrite(
         return false;
     }
 
-
     switch (
         request.parameterNumber
     )
@@ -511,7 +501,6 @@ bool BridgeParameters::handleWrite(
                 return false;
             }
 
-
             if (
                 brightness <
                     LED_BRIGHTNESS_MIN ||
@@ -524,7 +513,6 @@ bool BridgeParameters::handleWrite(
 
 
             CrsfDevice responseBuilder;
-
 
             if (
                 !responseBuilder
@@ -541,7 +529,6 @@ bool BridgeParameters::handleWrite(
             {
                 return false;
             }
-
 
             configuration
                 .ledBrightnessPercent =
@@ -565,7 +552,6 @@ bool BridgeParameters::handleWrite(
             return true;
         }
 
-
         case PITCH_INVERSION_PARAMETER:
         {
             return
@@ -583,6 +569,22 @@ bool BridgeParameters::handleWrite(
                 );
         }
 
+        case THROTTLE_INVERSION_PARAMETER:
+        {
+            return
+                handleInversionWrite(
+                    request,
+                    localAddress,
+                    THROTTLE_INVERSION_PARAMETER,
+                    configuration.throttle,
+                    BridgeParameterChange::
+                        AxisInversion,
+                    output,
+                    outputCapacity,
+                    outputLength,
+                    result
+                );
+        }
 
         case RESTORE_DEFAULTS_PARAMETER:
         {
@@ -605,7 +607,6 @@ bool BridgeParameters::handleWrite(
                     restoreDefaultsConfirmationPending =
                         true;
 
-
                     return
                         buildRestoreDefaultsResponse(
                             request.destination,
@@ -618,7 +619,6 @@ bool BridgeParameters::handleWrite(
                             outputLength
                         );
                 }
-
 
                 case COMMAND_CONFIRM:
                 {
@@ -639,7 +639,6 @@ bool BridgeParameters::handleWrite(
                             );
                     }
 
-
                     configuration =
                         BridgeConfiguration::defaults();
 
@@ -654,10 +653,8 @@ bool BridgeParameters::handleWrite(
 
                     result.pitchInverted =
                         configuration.pitch.inverted;
-
                     result.requiresPersistence =
                         true;
-
 
                     return
                         buildRestoreDefaultsResponse(
@@ -672,12 +669,10 @@ bool BridgeParameters::handleWrite(
                         );
                 }
 
-
                 case COMMAND_CANCEL:
                 {
                     restoreDefaultsConfirmationPending =
                         false;
-
 
                     return
                         buildRestoreDefaultsResponse(
@@ -691,7 +686,6 @@ bool BridgeParameters::handleWrite(
                             outputLength
                         );
                 }
-
 
                 case COMMAND_POLL:
                 {
@@ -712,14 +706,12 @@ bool BridgeParameters::handleWrite(
                         );
                 }
 
-
                 default:
                 {
                     return false;
                 }
             }
         }
-
 
         case ROLL_INVERSION_PARAMETER:
         {
@@ -738,7 +730,6 @@ bool BridgeParameters::handleWrite(
                 );
         }
 
-
         case YAW_INVERSION_PARAMETER:
         {
             return
@@ -755,7 +746,6 @@ bool BridgeParameters::handleWrite(
                     result
                 );
         }
-
 
         case AUX1_INVERSION_PARAMETER:
         {
@@ -774,7 +764,6 @@ bool BridgeParameters::handleWrite(
                 );
         }
 
-
         case AUX2_INVERSION_PARAMETER:
         {
             return
@@ -791,7 +780,6 @@ bool BridgeParameters::handleWrite(
                     result
                 );
         }
-
 
         case AUX3_INVERSION_PARAMETER:
         {
@@ -810,7 +798,6 @@ bool BridgeParameters::handleWrite(
                 );
         }
 
-
         case AUX4_INVERSION_PARAMETER:
         {
             return
@@ -828,7 +815,6 @@ bool BridgeParameters::handleWrite(
                 );
         }
 
-
         case DIAGNOSTICS_FOLDER_PARAMETER:
         case FAILSAFE_COUNT_INFO_PARAMETER:
         {
@@ -843,7 +829,6 @@ bool BridgeParameters::handleWrite(
         }
     }
 }
-
 
 void BridgeParameters::finalizePersistence(
     const BridgeParameterWriteResult& result,

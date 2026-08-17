@@ -1,80 +1,102 @@
-# T-Maint Checkpoint — Maintenance Rotation Cleanup
+# Throttle T9 — Permanent Throttle Inversion Candidate
 
 ## Scope
 
-This checkpoint changes only the BOOT-button maintenance selection rotation.
-It does not include any Throttle Inversion work or other feature changes.
+Adds a real configurable Throttle inversion parameter after the root-cause
+investigation established that the original ExpressLRS Lua menu hang was caused
+by parameter-name length, not throttle mapping.
+
+Hardware diagnostics established:
+
+- 16-character parameter name: menu enumerates normally
+- 17-character parameter name: menu enumeration hangs
+- 18-character parameter names: menu enumeration hangs
+- Forced internal `configuration.throttle.inverted = true`: HID Slider 1
+  reverses correctly
+
+The permanent throttle label is therefore:
+
+`Throttle Invert`
+
+15 characters.
+
+## Parameter order
+
+1. LED Brightness
+2. Pitch Inversion
+3. Throttle Invert
+4. Roll Inversion
+5. Yaw Inversion
+6. Aux 1 Inversion
+7. Aux 2 Inversion
+8. Aux 3 Inversion
+9. Aux 4 Inversion
+10. Diagnostics
+11. Failsafe Count
+12. Restore Defaults
+
+`BridgeIdentity` already derives the CRSF Device Info count from
+`BridgeParameters::PARAMETER_COUNT`, so no identity-file edit is required.
 
 ## Modified files
 
-- `src/maintenance_controller.h`
-- `src/maintenance_controller.cpp`
+- `src/bridge_parameters.h`
+- `src/bridge_parameters.cpp`
+- `src/crsf_parameter_self_test.cpp`
 
-## Behavior change
+## Behavior
 
-Previous hold rotation:
+Throttle uses the existing generic inversion path:
 
-- release before 2 s: Diagnostic
-- 2–4 s: Bind / Blue
-- 4–6 s: Wi-Fi / White
-- 6–8 s: Receiver Reset / Red
-- 8–10 s: No Action
-- repeat
+- Read: `configuration.throttle`
+- Default: `BridgeConfiguration::defaults().throttle`
+- Write: `configuration.throttle.inverted`
+- Change class: `BridgeParameterChange::AxisInversion`
+- Persistence: existing `requiresPersistence` flow and existing throttle bit in
+  `BridgeConfigurationRecord`
+- Runtime mapping: unchanged; already proven by T2
+- Failsafe policy: unchanged; throttle must still go to safe minimum on RC loss
 
-New hold rotation:
+## Self-test changes
 
-- release before 2 s: Diagnostic
-- 2–4 s: Bind / Blue
-- 4–6 s: No Action / Cancel
-- 6–8 s: Bind / Blue
-- 8–10 s: No Action / Cancel
-- repeat
+Startup parameter tests now verify:
 
-## Preserved behavior
+- registry count is 12
+- root child order includes Throttle
+- Throttle is a valid text-selection entry
+- the exact safe label `Throttle Invert` is serialized
+- a throttle inversion write changes `configuration.throttle.inverted`
+- an invalid throttle selection is rejected
+- Restore Defaults restores throttle to its canonical default
+- existing Diagnostics / Failsafe Count behavior remains covered
 
-- Short-press Link Quality diagnostic
-- Two-second maintenance selection intervals
-- Repeating hold rotation
-- Execute-on-release safety
-- Existing CRSF receiver Bind action
-- No Action as a safe escape
-- Non-blocking button handling
+## Hardware validation checklist
 
-## Implementation note
+1. Start from clean committed T-Maint state.
+2. Overlay this ZIP.
+3. Build normal `pico`.
+4. Confirm VS Code Problems is clear.
+5. Upload.
+6. Confirm startup reaches normal LED state (no fatal red).
+7. Open ExpressLRS -> Other Devices -> ELRS-HID-Bridge.
+8. Confirm menu loads normally and order is:
+   LED, Pitch, Throttle, Roll, Yaw, Aux 1-4, Diagnostics, Restore Defaults.
+9. Verify Throttle Invert defaults to Normal.
+10. In Windows `joy.cpl`, move throttle through full range.
+11. Set Throttle Invert -> Inverted.
+12. Verify Slider 1 reverses immediately.
+13. Close/reopen the ELRS menu and confirm the setting reads Inverted.
+14. Power-cycle the bridge and confirm the setting persists.
+15. Set Throttle Invert -> Normal and confirm Slider 1 returns to canonical
+    direction.
+16. Set Throttle Invert -> Inverted, then use Restore Defaults.
+17. Confirm Throttle returns to Normal.
+18. Turn the transmitter off and confirm failsafe still sends safe minimum
+    throttle, regardless of the configured live-input inversion.
+19. Turn the transmitter back on and confirm live configured behavior resumes.
+20. Smoke-test the other inversion parameters and BOOT diagnostic/Bind behavior.
 
-`MaintenanceSelection::Wifi`, `MaintenanceSelection::ReceiverReset`, and
-`MaintenanceAction::WifiRequested` remain as compatibility enum values so this
-checkpoint does not require unrelated changes to `main.cpp`. The controller no
-longer emits those selections/actions, so the white Wi-Fi and red reset slots
-are unreachable and no longer visible during the maintenance rotation.
+## Commit status
 
-They can be removed in a later cleanup when the surrounding display/action
-dispatch is intentionally revised.
-
-## Validation checklist
-
-1. Overlay the two `src` files from this package.
-2. Build the normal `pico` environment in VS Code / PlatformIO.
-3. Confirm VS Code reports no Problems.
-4. Flash the bridge.
-5. With the transmitter linked, short-press BOOT and verify the existing Link
-   Quality diagnostic still operates.
-6. Hold BOOT and verify:
-   - 2–4 s: blue Bind indication
-   - 4–6 s: normal operational indication / No Action
-   - 6–8 s: blue Bind indication
-   - 8–10 s: normal operational indication / No Action
-   - continued holding repeats this two-slot cycle
-7. Release during a No Action interval and verify nothing executes.
-8. Release during a Bind interval and verify the receiver Bind command still
-   executes as previously validated on ExpressLRS 3.4+.
-9. Confirm normal HID operation and reconnect/failsafe behavior remain unchanged.
-
-## Out of scope
-
-- Throttle Inversion
-- CRSF parameter changes
-- Wi-Fi commands
-- Receiver factory reset
-- Firmware update / serial passthrough
-- Documentation synchronization beyond this checkpoint note
+This package is intended to be commit-worthy **only after** the hardware
+validation above passes.

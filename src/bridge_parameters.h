@@ -2,7 +2,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
 #include "bridge_configuration.h"
 #include "bridge_state.h"
 #include "crsf_device.h"
@@ -39,34 +38,38 @@ public:
     // ExpressLRS Lua r18 loads and displays top-level device parameters in
     // ascending numeric parameter-ID order.
     //
-    // These post-v1.0 parameters have not yet shipped in a feature release, so
-    // use the intended user-facing order now rather than preserving a
-    // development-checkpoint numbering mistake.
+    // Hardware testing with the reference EdgeTX/ExpressLRS path established a
+    // practical device-menu parameter-name ceiling of 16 characters:
+    //
+    //   16-character name -> enumerates normally
+    //   17-character name -> menu enumeration stalls at that parameter
+    //
+    // Keep user-visible parameter names at 16 characters or fewer unless a
+    // future upstream implementation is explicitly validated with longer names.
     static constexpr uint8_t ROOT_PARAMETER = 0;
 
     static constexpr uint8_t LED_BRIGHTNESS_PARAMETER = 1;
-
     static constexpr uint8_t PITCH_INVERSION_PARAMETER = 2;
+    static constexpr uint8_t THROTTLE_INVERSION_PARAMETER = 3;
 
-    static constexpr uint8_t ROLL_INVERSION_PARAMETER = 3;
+    static constexpr uint8_t ROLL_INVERSION_PARAMETER = 4;
 
-    static constexpr uint8_t YAW_INVERSION_PARAMETER = 4;
+    static constexpr uint8_t YAW_INVERSION_PARAMETER = 5;
 
-    static constexpr uint8_t AUX1_INVERSION_PARAMETER = 5;
+    static constexpr uint8_t AUX1_INVERSION_PARAMETER = 6;
 
-    static constexpr uint8_t AUX2_INVERSION_PARAMETER = 6;
+    static constexpr uint8_t AUX2_INVERSION_PARAMETER = 7;
 
-    static constexpr uint8_t AUX3_INVERSION_PARAMETER = 7;
+    static constexpr uint8_t AUX3_INVERSION_PARAMETER = 8;
 
-    static constexpr uint8_t AUX4_INVERSION_PARAMETER = 8;
+    static constexpr uint8_t AUX4_INVERSION_PARAMETER = 9;
 
-    static constexpr uint8_t DIAGNOSTICS_FOLDER_PARAMETER = 9;
+    static constexpr uint8_t DIAGNOSTICS_FOLDER_PARAMETER = 10;
+    static constexpr uint8_t FAILSAFE_COUNT_INFO_PARAMETER = 11;
 
-    static constexpr uint8_t FAILSAFE_COUNT_INFO_PARAMETER = 10;
+    static constexpr uint8_t RESTORE_DEFAULTS_PARAMETER = 12;
 
-    static constexpr uint8_t RESTORE_DEFAULTS_PARAMETER = 11;
-
-    static constexpr uint8_t PARAMETER_COUNT = 11;
+    static constexpr uint8_t PARAMETER_COUNT = 12;
 
 
     explicit BridgeParameters(
