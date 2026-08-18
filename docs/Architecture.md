@@ -1,163 +1,70 @@
 # ELRS HID Bridge Architecture
 
-**Status:** v1.0 release-candidate architecture baseline  
+**Status:** post-v1.0 feature-freeze architecture baseline  
 **Updated:** August 2026
 
 ## 1. Purpose
 
-ELRS-HID-Bridge converts the CRSF output of an ExpressLRS receiver into a standard USB HID joystick.
+ELRS-HID-Bridge converts CRSF receiver data into a standard USB HID joystick while using the bidirectional CRSF link for transmitter-side configuration and supported receiver maintenance.
 
-The reference implementation is intentionally minimal:
+Reference hardware remains intentionally minimal:
 
-- Adafruit QT Py RP2040
-- ExpressLRS CRSF receiver, currently validated with RadioMaster RP2
+1. Adafruit QT Py RP2040
+2. RadioMaster RP2 ExpressLRS receiver
 
-No display, external pushbutton, companion application, custom USB driver, or custom carrier PCB is required for normal operation.
+No display, external pushbutton, mandatory companion application, custom USB driver, or custom carrier PCB is required for normal operation.
 
-The reference use case is a wireless FPV simulator controller:
-
-```text
-EdgeTX transmitter
-        |
-ExpressLRS TX module
-        |
-    ELRS RF link
-        |
-ExpressLRS receiver
-        |
-     CRSF UART
-        |
-  QT Py RP2040
-        |
-      USB HID
-        |
-       PC
-```
-
-The architecture is intentionally broader than a simulator dongle. The project is intended to remain a clean, forkable CRSF-to-USB HID foundation.
-
----
+A compact two-board enclosure has also been designed with an integrated flexible arm to actuate the QT Py BOOT button, preserving the minimal-hardware boundary.
 
 ## 2. Core Design Principles
 
-### 2.1 Two-component reference build
+### 2.1 Critical path isolation
 
-The upstream reference design requires only:
-
-1. a USB-capable RP2040 board, and
-2. an ExpressLRS/CRSF receiver.
-
-No mandatory feature should add hardware unless there is a compelling reason to change this principle.
-
-### 2.2 Plug-and-play normal operation
-
-Normal operation should remain:
-
-```text
-connect USB
-    ->
-power transmitter / establish ELRS link
-    ->
-use standard HID joystick
-```
-
-No proprietary PC driver or support application should be required for normal use.
-
-### 2.3 CRSF-focused foundation
-
-CRSF is the communication platform between the receiver and bridge, not merely an input encoding.
-
-The upstream project should prioritize robust CRSF support rather than becoming a generic RC-protocol adapter. SBUS/iBUS/PPM support is not a current core goal.
-
-### 2.4 Critical path isolation
-
-The critical path is:
+The critical path remains:
 
 ```text
 RC frame -> decode -> normalize -> map -> HID report
 ```
 
-Optional functionality must not interfere with this path.
+Configuration, telemetry, diagnostics, maintenance, LED/UI behavior, and future PC gateway functionality must not break or starve this path.
 
-Examples:
+### 2.2 Facts are separate from policy
 
-- telemetry failure must not break HID,
-- configuration failure must not break HID,
-- LED/UI failure must not break HID,
-- future PC gateway functionality must not break HID.
+Protocol modules report facts. Application/policy modules decide what those facts mean.
 
-Loss of valid RC input must always produce deterministic HID failsafe behavior.
+`Link Statistics received != RC control healthy`.
 
-### 2.5 Facts are separate from policy
+Valid RC Channels frames remain authoritative for RC health.
 
-Protocol modules report facts. Higher-level application code decides what those facts mean.
+### 2.3 Configuration is canonical data
 
-For example:
+Runtime configuration lives in `BridgeConfiguration`. CRSF parameter writes and persistent storage modify/read that same model rather than creating parallel configuration state.
 
-```text
-Link Statistics received != RC control healthy
-```
+### 2.4 Transmitter-first configuration
 
-The RP2 has been observed continuing to emit Link Statistics after RC Channels frames stopped, so telemetry presence must never override RC timeout state.
+Normal bridge configuration should use standard CRSF/EdgeTX mechanisms where practical. A proprietary desktop configuration application is not required for the current product.
 
-### 2.6 Hardware abstraction is separate from UI policy
+### 2.5 Maintenance uses existing hardware
 
-Low-level modules expose physical behavior:
+The onboard BOOT button and NeoPixel provide local diagnostics/maintenance. Mandatory external controls should not be added without a compelling requirement.
 
-- UART bytes,
-- button state/duration,
-- NeoPixel output,
-- USB HID reports.
+### 2.6 Features must earn their place
 
-Higher-level modules decide:
-
-- maintenance selections,
-- LED ownership priority,
-- receiver-loss state,
-- failsafe presentation.
-
-### 2.7 Configuration is data
-
-Runtime mapping, inversion, timeout, and future settings live in `BridgeConfiguration` rather than being distributed through protocol and UI code.
-
-Future CRSF configuration and persistent storage should modify the same canonical configuration model.
-
-### 2.8 Prefer extension points over feature accumulation
-
-The core should make specialized applications easy without owning every specialized application.
-
-OBS integration, race-station control, pilot-input logging, displays, and other application-specific features should generally remain optional modules/examples/forks.
-
----
-
-### 2.9 Open-source derivative policy
-
-ELRS-HID-Bridge project code is distributed under GPL-3.0-only. The licensing choice is part of the project boundary: downstream development and commercial distribution are allowed, while distributed derivative firmware remains subject to GPL source-availability and copyleft requirements.
-
-Third-party dependencies retain their upstream licenses. `THIRD_PARTY_NOTICES.md` records the dependency-license inventory used for release maintenance.
-
+Do not add diagnostics, telemetry, or maintenance actions merely because implementation is possible. Each should solve a concrete user, troubleshooting, or recovery problem.
 
 ## 3. Hardware Architecture
 
-### 3.1 Reference MCU
-
-Adafruit QT Py RP2040.
-
-Current resources used:
+### 3.1 QT Py RP2040 resources
 
 - native USB: HID transport
 - hardware UART: CRSF RX/TX
-- onboard NeoPixel: status/diagnostics
+- onboard NeoPixel: status/diagnostics/maintenance indication
 - onboard BOOT button: diagnostic/maintenance input
-- flash: firmware; future persistent configuration
-
-Unused RP2040 capability is considered design headroom, not wasted capacity.
+- flash: firmware and persistent bridge configuration
 
 ### 3.2 Reference receiver
 
 RadioMaster RP2 2.4 GHz ExpressLRS receiver.
-
-Reference wiring:
 
 ```text
 RP2 5V  -> QT Py 5V
@@ -166,21 +73,11 @@ RP2 TX  -> QT Py RX
 RP2 RX  -> QT Py TX
 ```
 
-CRSF UART rate:
+CRSF UART: `420000 baud`.
 
-```text
-420000 baud
-```
+Receiver-side BOOT Bind requires ExpressLRS 3.4.0+ and is validated on 3.4.3.
 
-The physical interface is intentionally bidirectional.
-
----
-
-## 4. Current Firmware Data Flow
-
-The major pre-v1.0 structural refactor is complete.
-
-Current receive/control architecture:
+## 4. Current Data Flow
 
 ```text
                          +----------------------+
@@ -200,249 +97,66 @@ ExpressLRS receiver                 |
         v                           |
   CrsfDispatcher                    |
    |      |      |                  |
-   |      |      +--> CrsfDevice    |
-   |      |                         |
-   |      +--> LinkStatisticsDecoder|
-   |                |               |
-   |                +--> BridgeState|
-   |                                |
-   +--> RcChannelDecoder            |
-            |                       |
-            v                       |
-       RawChannels                  |
-            |                       |
-            v                       |
-    ChannelNormalizer               |
-            |                       |
-            v                       |
-   NormalizedChannels               |
-            |                       |
-            v                       |
+   |      |      +--> CrsfDevice ---+--> BridgeParameters
+   |      |                           \-> receiver commands
+   |      |
+   |      +--> LinkStatisticsDecoder ----> BridgeState
+   |
+   +--> RcChannelDecoder
+            |
+            v
+       RawChannels
+            |
+            v
+    ChannelNormalizer
+            |
+            v
+   NormalizedChannels
+            |
+            v
       ChannelMapper <---------------+
             |
             v
       ChannelState
             |
-            +------------------> UsbHid
+            v
+         UsbHid
 ```
 
-Application/UI support:
+Supporting UI/application path:
 
 ```text
-BootButton
-    |
-    v
-MaintenanceController
-    |
-    v
-StatusDisplay <---- BridgeState
-    |
-    v
-StatusLed
+BootButton -> MaintenanceController -> StatusDisplay -> StatusLed
+                                      ^
+                                      |
+                                  BridgeState
 ```
 
-Failsafe behavior is generated by `FailsafePolicy`, not directly in `main.cpp`.
+Persistent storage reads/writes `BridgeConfiguration`. `FailsafePolicy` creates deterministic safe HID state independently of normal mapping.
 
----
+## 5. Major Boundaries
 
-## 5. Module Boundaries
+### CrsfUart
 
-### 5.1 CrsfUart
+Owns physical CRSF UART RX/TX only.
 
-Owns physical UART transport only.
+### CrsfParser
 
-Responsibilities:
+Owns frame synchronization, length validation, assembly, CRC validation, and stream recovery.
 
-- initialize the CRSF UART,
-- receive raw bytes,
-- transmit raw bytes,
-- expose transport facts/statistics where useful.
+### CrsfDispatcher
 
-It does not interpret CRSF frame types.
+Routes validated frame types to semantic handlers.
 
-The TX primitive is now used by one deliberately narrow production path: a valid Device Ping may generate a Device Info response during the discovery proof-of-concept. No other live outbound CRSF behavior is enabled.
+### RcChannelDecoder / ChannelNormalizer
 
-### 5.2 CrsfParser
+Decode all 16 CRSF RC channels and convert them to the protocol-independent normalized range.
 
-Consumes raw bytes and produces validated `CrsfFrame` objects.
+### ChannelMapper
 
-Responsibilities:
+Maps normalized channels to HID-facing `ChannelState` using `BridgeConfiguration`.
 
-- frame synchronization,
-- length validation,
-- frame assembly,
-- CRC validation,
-- malformed/partial stream recovery.
-
-It does not interpret payload semantics.
-
-Frame synchronization is generalized beyond a permanent `0xC8`-only assumption and accepts valid CRSF serial/device address values.
-
-### 5.3 CrsfFrame
-
-Represents one validated CRSF frame.
-
-Current fields include:
-
-- frame address/sync byte,
-- length,
-- frame type,
-- payload pointer,
-- payload length.
-
-The payload view is transient and is consumed synchronously by the dispatcher.
-
-### 5.4 CrsfDispatcher
-
-Routes validated frames by type.
-
-Current routes include:
-
-```text
-0x16 RC Channels      -> RcChannelDecoder
-0x14 Link Statistics  -> LinkStatisticsDecoder
-0x28 Device Ping      -> CrsfDevice
-```
-
-Unsupported but otherwise valid frames are intentionally ignored.
-
-### 5.5 RcChannelDecoder
-
-Explicitly unpacks all sixteen packed 11-bit RC channels into `RawChannels`.
-
-Compiler-dependent packed bitfields are intentionally avoided.
-
-### 5.6 LinkStatisticsDecoder
-
-Decodes CRSF Link Statistics (`0x14`).
-
-These values are diagnostic facts only and cannot independently establish healthy RC control state.
-
-### 5.7 CrsfFrameEncoder
-
-Constructs outbound CRSF extended-header frames.
-
-Responsibilities:
-
-- extended-frame sizing,
-- destination/origin placement,
-- payload copy,
-- CRC generation,
-- output-capacity validation.
-
-It does not own UART transmission.
-
-### 5.8 CrsfDevice
-
-Owns CRSF device-level protocol behavior.
-
-Current responsibilities:
-
-- recognize validated Device Ping (`0x28`) traffic,
-- retain the latest ping routing information,
-- construct a Device Info (`0x29`) response for a supplied local device address and identity.
-
-The Device Info builder currently:
-
-- responds only to broadcast or directly addressed pings,
-- routes the response to the ping origin,
-- uses the supplied local address as response origin,
-- encodes the null-terminated device name,
-- encodes Serial Number, Hardware ID, and Firmware ID as big-endian `uint32_t`,
-- encodes parameter count/version,
-- delegates final extended-frame/CRC construction to `CrsfFrameEncoder`.
-
-The builder does **not** transmit.
-
-The Device Info builder continues to receive address and identity as caller-supplied data. The reference implementation supplies those values through `bridge_identity.h`, keeping project identity policy outside the reusable protocol encoder.
-
-
-### 5.9 BridgeIdentity
-
-Owns the project-level CRSF discovery identity used by the live reference implementation.
-
-Current reference values:
-
-```text
-Local CRSF address  0xC8 (Flight Controller)
-Device name         ELRS-HID-Bridge
-Parameters          0
-```
-
-The `0xC8` selection reflects the bridge's FC-side position on the RP2 UART and has been validated through RP2/Ranger/EdgeTX hardware testing. `EHB1` and `QTPY` are stable project-defined identifiers for the reference implementation; the Serial Number field is a project-family identifier rather than a per-unit unique serial number. Firmware ID is derived from `FirmwareVersion::CRSF_ID`.
-
-This separation is intentional: `CrsfDevice` owns protocol mechanics, while project identity/routing policy remains outside the reusable protocol layer.
-
-### 5.10 FirmwareVersion
-
-`firmware_version.h` is the canonical firmware-version source.
-
-Current version:
-
-```text
-1.0.0-rc1
-```
-
-The CRSF `Firmware_ID` packs the semantic version tuple into the upper 24 bits of a `uint32_t`; the low byte is reserved and currently zero. The prerelease label is human-readable metadata and is not encoded into the CRSF numeric field.
-
-`FirmwareVersionSelfTest` verifies the canonical tuple/string and confirms that `BridgeIdentity::CRSF_FIRMWARE_ID` consumes this source rather than maintaining a second independent version constant.
-
-This keeps version policy separate from CRSF encoding mechanics and gives release/tag tooling one firmware version source to update. `1.0.0-rc1` and final `1.0.0` intentionally share CRSF Firmware ID `0x01000000` because prerelease labels are not encoded.
-
-### 5.11 BridgeState
-
-Central application-state model for operational facts.
-
-Current responsibilities include RC/UART/link facts and receiver timeout state.
-
-It must remain an application-state model rather than a dumping ground for hardware implementation details.
-
-### 5.12 ChannelNormalizer
-
-Converts CRSF channel values into the protocol-independent internal range.
-
-Current normalized range:
-
-```text
-0 .. 65535
-```
-
-### 5.13 BridgeConfiguration
-
-Canonical runtime configuration model.
-
-It is currently populated from compiled defaults and is consumed by mapping/state code.
-
-Future CRSF parameters and persistent storage should modify this same model instead of creating parallel configuration paths.
-
-### 5.14 ChannelMapper
-
-Consumes `NormalizedChannels` plus `BridgeConfiguration` and produces `ChannelState`.
-
-Current reference channel layout:
-
-```text
-CH1  -> Roll
-CH2  -> Pitch
-CH3  -> Throttle
-CH4  -> Yaw
-
-CH5  -> SF
-CH6  -> SA
-CH7  -> SB
-CH8  -> SC
-CH9  -> SD
-CH10 -> SE
-CH11 -> SG
-CH12 -> SH
-
-CH13 -> Auxiliary Analog 1
-CH14 -> Auxiliary Analog 2
-CH15 -> Auxiliary Analog 3
-CH16 -> Auxiliary Analog 4
-```
-
-Validated primary-axis orientation:
+Validated defaults:
 
 ```text
 Roll     normal
@@ -451,434 +165,175 @@ Throttle normal
 Yaw      normal
 ```
 
-### 5.15 ChannelState
+All eight proportional axes have configurable inversion. Throttle inversion uses the same generic configuration/mapping architecture; failsafe throttle remains safe minimum regardless of live inversion.
 
-Protocol-independent semantic HID state.
+### BridgeState
 
-Current analog profile:
+Owns operational facts such as RC activity, link statistics, timeout/failsafe state, and diagnostic counters.
 
-```text
-X        Roll
-Y        Pitch
-Slider 1 Throttle
-Slider 2 Yaw
-Z        Auxiliary Analog 1
-Rx       Auxiliary Analog 2
-Ry       Auxiliary Analog 3
-Rz       Auxiliary Analog 4
-```
+### BridgeConfiguration
 
-The descriptor supports 32 buttons.
+Owns canonical runtime configuration/defaults, including LED brightness and axis inversion.
 
-### 5.16 FailsafePolicy
+### Persistent configuration
 
-Owns construction of deterministic failsafe HID state.
+Persists bridge configuration with schema/version handling, validation, safe defaults, and migration/fallback behavior. Restore Defaults writes canonical defaults.
 
-Current trigger:
+### CrsfDevice / parameter service
 
-```text
-500 ms without a valid RC channel frame
-```
+Owns device discovery and CRSF device-level parameter/command behavior.
 
-Current documented behavior:
+Current capabilities include:
 
-```text
-Roll         center
-Pitch        center
-Yaw          center
-Throttle     minimum
-AUX Analog 1 center
-AUX Analog 2 center
-AUX Analog 3 center
-AUX Analog 4 center
-Buttons      released
-```
+- Device Ping / Device Info discovery
+- parameter read/write
+- text-selection inversion parameters
+- LED brightness
+- Diagnostics folder
+- Failsafe Count
+- Restore Defaults
+- supported receiver Bind command
 
-Every HID output is explicitly assigned by `FailsafePolicy`; no proportional or button value is intentionally retained across RC timeout.
+### CRSF parameter-name compatibility rule
 
-When valid RC frames resume, live mapped control resumes automatically.
-
-### 5.17 UsbHid
-
-Owns USB HID presentation:
-
-- enumeration,
-- report descriptor,
-- HID report generation,
-- host communication,
-- HID interface string.
-
-The v1.0 reference identity is:
+Hardware investigation established an empirical EdgeTX/ExpressLRS compatibility boundary:
 
 ```text
-USB product       ELRS-HID-Bridge
-HID interface     ELRS-HID-Bridge
-USB manufacturer  zapawc
+<= 16 visible characters -> validated
+>= 17 visible characters -> menu enumeration stalls
 ```
 
-The USB product/manufacturer descriptors are configured through `platformio.ini`; the HID interface string is set by `UsbHid`. Keep the product and HID interface strings synchronized. The internal PlatformIO environment name `pico` is not a user-facing device identity.
+`Throttle Invert` is intentionally 15 characters.
 
-Windows hardware validation confirmed that the USB composite parent and HID interface both report `ELRS-HID-Bridge` through `DEVPKEY_Device_BusReportedDeviceDesc`. The current build still inherits VID/PID `0x2E8A:0x000A`; `joy.cpl` may therefore retain/display `Pico` even though the project-controlled product descriptor is correct.
+**Architecture rule:** user-visible CRSF parameter names must remain at 16 characters or fewer unless longer names are explicitly revalidated on the target EdgeTX/ExpressLRS stack.
 
-USB VID/PID allocation is treated as release/deployment identity policy rather than HID transport logic. For v1.0, the reference build intentionally retains the inherited `0x2E8A:0x000A` identity. The project-controlled product/interface strings are validated as `ELRS-HID-Bridge`; the remaining Windows `joy.cpl` `Pico` label is documented as cosmetic. A dedicated VID/PID may be reconsidered after v1.0 if distribution needs justify it. See `docs/USB-Identity.md`.
+Startup self-tests should protect the production parameter registry, ordering, serialization, and write routing.
 
-It remains unaware of CRSF details.
+### FailsafePolicy
 
-### 5.18 BootButton
+Owns deterministic receiver-loss output:
 
-Low-level onboard BOOT-button abstraction.
+- Roll/Pitch/Yaw centered
+- Throttle minimum
+- AUX 1-4 centered
+- all buttons released
 
-It exposes physical state/duration/events and does not encode Bind/Wi-Fi semantics.
+### BootButton
 
-### 5.19 MaintenanceController
+Low-level physical input only.
 
-Owns maintenance-button policy.
+### MaintenanceController
 
-Current interaction model:
+Owns BOOT interaction policy.
+
+Current visible rotation:
 
 ```text
-short click    -> diagnostic action
-~2 s hold      -> Bind candidate
-~5 s hold      -> Wi-Fi candidate
-continued hold -> Cancel candidate
+release <2 s -> Link Quality diagnostic
+2-4 s        -> Bind / blue
+4-6 s        -> No Action / Cancel
+continue     -> repeat in 2-second steps
 ```
 
-Selection occurs while held; action occurs on release.
+Actions execute on release only.
 
-Bind/Wi-Fi actions are currently reserved and do not transmit receiver commands.
+Wi-Fi and receiver factory reset are intentionally absent because no supported FC-facing CRSF UART command was identified for those operations on ExpressLRS 3.4.3.
 
-### 5.20 StatusLed
+### StatusDisplay / StatusLed
 
-Low-level NeoPixel output abstraction.
+`StatusDisplay` arbitrates ownership. `StatusLed` only renders physical color/pattern requests.
 
-It produces requested colors/patterns but does not decide display ownership.
+## 6. RC Health and Failsafe
 
-### 5.21 StatusDisplay
-
-Arbitrates competing LED presentation modes.
-
-Priority:
+RC validity is based only on valid `0x16` RC Channels frames.
 
 ```text
-fatal/startup error
-    >
-button-selection UI
-    >
-temporary diagnostic
-    >
-normal system state
+valid RC
+  -> RC frames stop
+  -> 500 ms timeout
+  -> FailsafePolicy
+  -> purple status
+  -> valid RC resumes
+  -> live mapped state
+  -> green status
 ```
 
-Conceptual normal states:
+Link Statistics may continue during RC loss and must not restore healthy state.
+
+## 7. HID Architecture
+
+Current proportional mapping:
 
 ```text
-White  startup
-Blue   firmware healthy / waiting for RC
-Yellow UART activity without valid RC control
-Green  valid RC control / normal operation
-Purple RC link lost / HID failsafe
-Red    startup/self-test error
+X        CH1  Roll
+Y        CH2  Pitch
+Slider 1 CH3  Throttle
+Slider 2 CH4  Yaw
+Z        CH13 AUX 1
+Rx       CH14 AUX 2
+Ry       CH15 AUX 3
+Rz       CH16 AUX 4
 ```
 
-Pure green is reserved for fully healthy normal HID operation.
+With RP2 firmware 3.4.3, CH13-CH16 are hardware validated as proportional in the reference 333 Hz Full / 16ch Rate/2 configuration.
 
-### 5.22 Startup self-tests
+## 8. Startup Self-Test Policy
 
-Protocol transformations are tested deterministically during startup where practical.
+Deterministic startup tests protect protocol and safety invariants where practical.
 
-Current startup coverage includes:
+Current coverage includes:
 
-- CRSF receive parsing/decoding,
-- extended-frame construction,
-- Device Ping recognition,
-- Device Info response construction,
-- complete failsafe output policy.
+- CRSF parsing/decoding
+- outbound extended-frame construction
+- Device Ping / Device Info
+- parameter registry count/order/serialization
+- throttle parameter production label
+- valid/invalid inversion writes
+- Restore Defaults behavior
+- Diagnostics / Failsafe Count
+- complete failsafe output policy
+- firmware version/identity consistency
 
-The Device Info tests validate:
+A failed invariant may intentionally prevent normal startup rather than permit a malformed protocol registry to run.
 
-- broadcast ping handling,
-- directly addressed ping handling,
-- unrelated destination rejection,
-- destination/origin reversal,
-- null-terminated name encoding,
-- big-endian identity fields,
-- CRSF length,
-- CRC.
+## 9. Future Receiver Firmware Update Mode
 
-The failsafe policy test validates:
+A future feature is reserved conceptually for a complete **Receiver Firmware Update / USB Serial Passthrough** workflow.
 
-- throttle minimum,
-- roll/pitch/yaw center,
-- all four AUX analog outputs center,
-- all buttons released,
-- repeated application is idempotent.
-
-None of these startup tests transmit on the live CRSF UART.
-
----
-
-## 6. RC Link and Failsafe State
-
-RC validity is based on receipt of valid RC Channels frames.
-
-Observed receiver-loss behavior:
+Potential architecture:
 
 ```text
-RF loss
-  |
-RC Channels frames stop
-  |
-Link Statistics may continue
+future red selection
+    -> supported receiver bootloader transition
+    -> QT Py enters dedicated USB serial personality
+    -> PC flashing tool communicates through UART passthrough
+    -> receiver firmware update
 ```
 
-Therefore:
+This is a feature addition, not current release cleanup.
 
-```text
-Link Statistics received != RC control healthy
-```
+Open questions include USB CDC/tool compatibility, baud transitions, DTR/RTS expectations, buffering, interrupted-flash recovery, re-enumeration, and exit behavior.
 
-Normal state sequence:
+Do not expose a bootloader-only red action until the complete user recovery/update path is designed.
 
-```text
-valid RC control
-      |
-RC frames stop
-      |
-500 ms timeout
-      |
-failsafe ChannelState
-      |
-purple status
-      |
-valid RC resumes
-      |
-live ChannelState resumes
-      |
-green status
-```
+## 10. Telemetry and Diagnostics Boundary
 
----
+Diagnostics currently contains only `Failsafe Count`.
 
-## 7. ELRS Channel Resolution
+Do not consume legitimate CRSF telemetry sensor semantics for bridge bookkeeping. Future real telemetry forwarding from a PC/simulator remains possible and should use semantically correct CRSF telemetry when implemented.
 
-Initial testing used 250 Hz Wide.
+## 11. Compatibility and Portability
 
-Additional proportional AUX channels required Full Resolution behavior.
+ExpressLRS is the hardware-validated CRSF transport.
 
-Current tested transmitter configuration:
+TBS Crossfire and Tracer are expected CRSF compatibility targets but remain unvalidated. Future validation should be community-driven rather than blocking current releases.
 
-```text
-333 Hz Full
-16ch Rate/2
-```
+Board portability should preserve clean board-specific boundaries, but additional RP2040 targets should be demand-driven.
 
-With the tested ExpressLRS 3.3.1 receiver firmware:
+## 12. Release Architecture Rule
 
-- CH13 and CH14 operate proportionally.
-- CH15 and CH16 remained high.
+`v1.0.0` is the immutable stable baseline.
 
-Diagnostic remapping demonstrated that CH15/CH16 behavior follows those CRSF channels and is upstream of HID mapping. The bridge therefore retains the intended mapping rather than adding an HID-side workaround.
+The current post-v1.0 feature set is at feature freeze. No new runtime functionality should enter before documentation synchronization, complete regression, and the next feature release.
 
----
-
-## 8. Bidirectional CRSF Direction
-
-The physical link is already bidirectional:
-
-```text
-RP2 TX -> QT Py RX
-RP2 RX <- QT Py TX
-```
-
-The transport and frame-encoding boundaries are now TX-capable.
-
-### 8.1 Validated Device Discovery Proof-of-Concept
-
-Current state:
-
-```text
-Device Ping received
-      |
-      v
-CrsfDevice validates routing
-      |
-      v
-Device Info response constructed
-      |
-      v
-CrsfUart::write()
-      |
-      v
-RP2 -> ELRS RF -> Ranger -> EdgeTX
-      |
-      v
-ELRS-HID-Bridge appears under Other Devices
-```
-
-Hardware validation confirmed that this live TX path does not disturb normal 333 Hz Full RC-to-HID operation or Liftoff performance. Identity-only discovery therefore proves the bidirectional architecture without requiring a parameter tree for v1.0.
-
-CRSF feature expansion is frozen for the v1.0 cycle.
-
-### 8.2 Address/identity policy
-
-The protocol builder intentionally does not hard-code the bridge address or identity. Reference-project policy remains isolated in `bridge_identity.h`.
-
-The `0xC8` Flight Controller address is validated as routable on the reference RP2/Ranger/EdgeTX path and is retained as the reference v1.0 address policy.
-
-Serial Number `0x45484231` (`EHB1`) and Hardware ID `0x51545059` (`QTPY`) are stable project-defined identifiers. Firmware ID is no longer an independent placeholder: it is derived from the canonical semantic version source in `firmware_version.h`.
-
-### 8.3 Future CRSF configuration
-
-With identity discovery proven, future transmitter-side configuration may expose:
-
-- channel/HID assignments,
-- axis inversion,
-- switch types,
-- failsafe timeout/behavior,
-- LED settings,
-- calibration,
-- diagnostics,
-- restore defaults,
-- reboot.
-
-This remains post-v1.0 unless it proves unusually low-risk and valuable.
-
-### 8.4 Bridge health telemetry
-
-Potential future outbound data includes:
-
-- firmware version,
-- USB/HID readiness,
-- RC state,
-- LQ/RSSI/SNR,
-- parser/CRC counters,
-- timeout/failsafe counters,
-- uptime/reset information.
-
-Telemetry is informational and must not control the critical HID state machine.
-
----
-
-## 9. Local Maintenance Philosophy
-
-The BOOT button and NeoPixel provide a zero-additional-hardware maintenance interface.
-
-Intended uses:
-
-- immediate diagnostics,
-- initial binding/recovery,
-- receiver Wi-Fi access,
-- recovery-oriented functions.
-
-The button should not become the primary configuration UI.
-
-Routine configuration should preferentially use standard CRSF device configuration if that capability is implemented.
-
----
-
-## 10. Forkability and Extension Philosophy
-
-A contributor should be able to identify directly from the source tree:
-
-```text
-where bytes enter,
-where CRSF frames are validated,
-where frame types are dispatched,
-where channels are decoded/normalized,
-where system state is derived,
-where mappings are applied,
-where outbound frames are constructed,
-where HID reports leave.
-```
-
-Likely extension points include:
-
-- new CRSF frame consumers,
-- alternative HID profiles,
-- keyboard/media HID,
-- PC automation,
-- logging,
-- race-station integration,
-- alternative RP2040 boards,
-- optional STEMMA QT hardware.
-
-The upstream project does not need to implement all of them.
-
----
-
-## 11. Completed Structural Refactor
-
-The previously recommended pre-expansion refactors are now complete:
-
-1. CRSF parsing separated from frame-type dispatch.
-2. CRSF synchronization generalized beyond a fixed `0xC8` assumption.
-3. `CrsfUart` decoupled from `CrsfDecoder` and given a TX-capable API.
-4. `BridgeState` introduced for application state/facts.
-5. `BridgeConfiguration` introduced and consumed by mapping.
-6. BOOT-button hardware separated from maintenance semantics.
-7. `StatusDisplay` added above `StatusLed` for arbitration.
-8. failsafe generation extracted into `FailsafePolicy`.
-9. outbound extended-frame encoding added through `CrsfFrameEncoder`.
-10. `CrsfDevice` introduced for Device Ping/Device Info work.
-
-The architecture should not be refactored again merely because additional abstraction is possible. New changes should be driven by demonstrated protocol or release needs.
-
----
-
-## 12. Testing Philosophy
-
-The project is regression-sensitive.
-
-Preferred workflow:
-
-```text
-known-good commit
-      |
-one small change
-      |
-compile + startup self-tests
-      |
-bench validation
-      |
-Windows HID validation
-      |
-Liftoff validation when control path changed
-      |
-commit
-```
-
-Protocol transformations should be deterministic and hardware-independent where practical.
-
-Hardware validation remains mandatory for:
-
-- ELRS packet/channel modes,
-- receiver loss/reconnect,
-- CRSF timing,
-- UART direction/transmission,
-- EdgeTX discovery/routing,
-- BOOT-button behavior,
-- NeoPixel interaction,
-- USB enumeration/HID behavior.
-
----
-
-## 13. Project Boundary
-
-The upstream reference identity is:
-
-> An open-source, two-component CRSF-to-USB HID bridge and development foundation, with a wireless FPV simulator joystick as its reference application.
-
-Features that make the reusable foundation more robust or easier to extend belong upstream.
-
-Features that merely implement a specific end application should generally remain examples, optional extensions, or forks.
-
-
-## Release Build Reproducibility
-
-The v1.0 reference build pins the hardware-tested Arduino-Pico framework (`1.60000.0`), RP2040 toolchain (`5.160100.260719`), and Adafruit NeoPixel (`1.15.5`) packages in `platformio.ini`. Build-system dependency changes are release-affecting changes and require the normal hardware regression suite.
-
-The USB product/interface descriptors remain `ELRS-HID-Bridge`, while the v1.0 reference build intentionally retains inherited VID/PID `0x2E8A:0x000A`. Windows `joy.cpl` may display `Pico`; this does not alter HID behavior or the bus-reported product identity.
-
-The `1.0.0-rc1` cycle freezes runtime behavior and treats packaging as a separate release boundary. The normal `pico` build produces `.pio/build/pico/firmware.uf2`; `tools/Stage-Release.ps1` copies that already-built artifact into `dist/` with the canonical version in the filename and records a SHA-256 hash plus source commit when available. The staging tool deliberately does not invoke PlatformIO, so artifact construction remains the same proven VS Code/PlatformIO workflow.
-
-`dist/` is ignored by Git. Published binaries must correspond to the exact source commit/tag that was built and hardware-tested. See `docs/Release.md` and `docs/Release-Checklist.md`.
+Future work should resume only after architecture/roadmap review.

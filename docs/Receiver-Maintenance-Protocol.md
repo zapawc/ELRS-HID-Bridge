@@ -6,58 +6,94 @@
 
 ## Purpose
 
-Record the protocol basis for physical BOOT-button receiver maintenance actions and prevent unsupported CRSF/ExpressLRS commands from being invented.
+Record the protocol basis for BOOT-button receiver maintenance and prevent unsupported CRSF/ExpressLRS commands from being invented.
+
+## Current User Interface
+
+The supported maintenance rotation is intentionally minimal:
+
+```text
+release <2 s -> Link Quality diagnostic
+2-4 s        -> Bind / blue
+4-6 s        -> No Action / Cancel
+continue     -> repeat Bind -> No Action
+```
+
+Actions execute only when BOOT is released.
 
 ## Bind
 
-Status: **implemented and hardware validated**.
+**Status: implemented and hardware validated.**
 
-ExpressLRS 3.4 added receiver-side handling for the standard CRSF receiver Bind command. The FC-side UART command is a CRSF `COMMAND` (`0x32`) frame addressed to the CRSF receiver (`0xEC`) from the flight-controller address (`0xC8`), using receiver command realm `0x10` and Bind subcommand `0x01`.
+ExpressLRS 3.4 added receiver-side handling for the standard CRSF receiver Bind command.
 
-The bridge implementation generates this frame through `CrsfReceiverCommand` rather than hard-coding the complete frame in `main.cpp`.
+FC-side command:
 
-Hardware validation was completed successfully on a RadioMaster RP2 running ExpressLRS 3.4.3.
+```text
+Frame type   0x32  COMMAND
+Destination  0xEC  Receiver
+Origin       0xC8  Flight Controller
+Realm        0x10  Receiver command
+Subcommand   0x01  Bind
+```
+
+The bridge generates the frame through `CrsfReceiverCommand`.
+
+Hardware validation succeeded on RadioMaster RP2 running ExpressLRS 3.4.3.
 
 ### Compatibility requirement
 
-Receiver-side BOOT-button Bind requires **ExpressLRS 3.4.0 or newer**. Receivers on earlier firmware should not be expected to respond to the CRSF receiver Bind command.
+Receiver-side BOOT-button Bind requires **ExpressLRS receiver firmware 3.4.0 or newer**.
 
 ## Wi-Fi
 
-Status: **not implemented; no supported FC-side UART command identified for ExpressLRS 3.4.3**.
+**Status: intentionally not implemented.**
 
-ExpressLRS 3.4.3 defines the ELRS-specific opcode:
+ExpressLRS 3.4.3 defines `MSP_ELRS_SET_RX_WIFI_MODE = 0x0E` in its transmitter-to-receiver MSP/RF control path. That path is distinct from the receiver's FC-facing CRSF UART parser.
+
+No equivalent supported FC-side CRSF UART Wi-Fi command was identified.
+
+Therefore:
+
+- the bridge does not synthesize a guessed `0x32` Wi-Fi command;
+- the former white Wi-Fi selection has been removed from the visible BOOT rotation;
+- normal receiver automatic Wi-Fi behavior remains available;
+- Wi-Fi shortcut support may be reconsidered if upstream ExpressLRS later exposes a legitimate FC-UART mechanism.
+
+## Receiver Factory Reset
+
+**Status: retired / not implemented.**
+
+No supported FC-facing CRSF UART command for clearing receiver configuration was identified.
+
+The bridge does not fake this function. The former blinking-red factory-reset selection has been removed.
+
+## Future Receiver Firmware Update / Serial Passthrough
+
+A receiver bootloader transition is a legitimate basis for a future maintenance feature, but bootloader entry alone is not considered sufficient.
+
+The desired future user story is:
 
 ```text
-MSP_ELRS_SET_RX_WIFI_MODE = 0x0E
+future blinking-red Firmware Update selection
+    -> receiver enters bootloader
+    -> QT Py enters dedicated USB serial/passthrough mode
+    -> PC flashing tool communicates through QT Py UART
+    -> receiver firmware is updated
 ```
 
-The receiver handles that opcode in the assembled ExpressLRS MSP data path and then defers a call to `setWifiUpdateMode()` so the MSP transfer can be acknowledged first.
+Open work before implementation:
 
-That path is distinct from the receiver's FC-side CRSF UART parser. In ExpressLRS 3.4.3, the FC-side UART parser explicitly handles receiver Bind, bootloader, model-match, and Device Ping internal cases, but does not expose a corresponding Wi-Fi transition command.
+- confirm ExpressLRS Configurator direct-UART expectations
+- confirm USB CDC/serial compatibility
+- determine baud-rate transitions
+- determine DTR/RTS requirements
+- validate receiver bootloader behavior
+- design buffering/flow control
+- design interrupted-flash recovery
+- design USB re-enumeration
+- define safe update-mode exit/recovery
 
-Therefore the bridge must **not** construct a guessed `0x32` Wi-Fi command or attempt to reuse `MSP_ELRS_SET_RX_WIFI_MODE` as though it were an FC-side UART command.
+The future red indication should mean **Receiver Firmware Update**, not factory reset.
 
-### Current disposition
-
-- Keep the 4-6 second white Wi-Fi selection reserved.
-- Release during the Wi-Fi selection must remain non-transmitting.
-- Revisit only if an authoritative ExpressLRS implementation adds or documents a receiver-side FC-UART mechanism that can legitimately enter Wi-Fi mode.
-
-## Receiver Reset / Recovery
-
-Status: **not yet researched to completion**.
-
-No reset/recovery implementation should be added until an authoritative receiver-side mechanism is identified. The blinking-red slot remains reserved and execute-on-release safety remains mandatory.
-
-## Authoritative implementation references
-
-Research was based on ExpressLRS 3.4.3 source and the public CRSF receiver command definition, specifically:
-
-- `ExpressLRS/src/src/rx-serial/SerialCRSF.cpp`
-- `ExpressLRS/src/lib/Telemetry/telemetry.cpp`
-- `ExpressLRS/src/src/rx_main.cpp`
-- `ExpressLRS/src/lib/MSP/msptypes.h`
-- CRSF receiver command realm (`0x10`) and Bind subcommand (`0x01`)
-
-The implementation rule remains: supported receiver maintenance commands only; no guessed frame IDs, destinations, subcommands, or payloads.
+This feature is explicitly deferred until after the current release cycle.

@@ -1,444 +1,177 @@
 # CRSF Protocol Notes
 
-**Status:** v1.0 release-candidate protocol baseline  
+**Status:** post-v1.0 configuration/maintenance protocol baseline  
 **Updated:** August 2026
 
 ## 1. Supported Protocol
 
 ELRS-HID-Bridge targets the Team BlackSheep Crossfire (CRSF) serial protocol as implemented by ExpressLRS receivers.
 
-Official specification:
-
-https://github.com/tbs-fpv/tbs-crsf-spec
-
-Reference UART configuration:
+Reference UART:
 
 ```text
 420000 baud
 ```
 
----
-
 ## 2. Current Frame Support
 
 | Frame | Description | Current status |
 |---|---|---|
-| `0x14` | Link Statistics | Decoded and used for diagnostics only |
+| `0x14` | Link Statistics | Decoded for diagnostics only |
 | `0x16` | RC Channels Packed | Decoded; primary HID control source |
-| `0x28` | Parameter Ping Devices / Device Ping | Recognized and routed to `CrsfDevice` |
-| `0x29` | Parameter Device Information / Device Info | Construction self-tested; live response TX hardware validated through RP2/Ranger/EdgeTX |
-| `0x2B` | Parameter Settings Entry | Defined for future work; not implemented |
-| `0x2C` | Parameter Read | Defined for future work; not implemented |
-| `0x2D` | Parameter Write | Defined for future work; not implemented |
-| `0x32` | Command | Defined for future work; not implemented |
+| `0x28` | Device Ping | Recognized/routed |
+| `0x29` | Device Info | Constructed/transmitted; hardware validated |
+| `0x2B` | Parameter Settings Entry | Implemented for CRSF device parameters |
+| `0x2C` | Parameter Read | Implemented |
+| `0x2D` | Parameter Write | Implemented |
+| `0x32` | Command | Implemented for supported bridge/receiver commands including receiver Bind |
 
-Unsupported but structurally valid frame types are intentionally ignored by the dispatcher.
+Unsupported but structurally valid frames are intentionally ignored.
 
----
+## 3. RC Health Rule
 
-## 3. Frame Structure
-
-### Broadcast frame
-
-```text
-+---------+--------+------+---------+------+
-| Sync    | Length | Type | Payload | CRC  |
-+---------+--------+------+---------+------+
-```
-
-### Extended-header frame
-
-```text
-+---------+--------+------+-------------+--------+---------+------+
-| Sync    | Length | Type | Destination | Origin | Payload | CRC  |
-+---------+--------+------+-------------+--------+---------+------+
-```
-
-CRSF frames are at most 64 bytes including Sync and CRC.
-
-The Length byte represents the number of bytes after Sync and Length:
-
-```text
-Broadcast:
-Type + Payload + CRC
-
-Extended:
-Type + Destination + Origin + Payload + CRC
-```
-
-Valid CRSF length range:
-
-```text
-2 .. 62
-```
-
----
-
-## 4. Synchronization / Address Handling
-
-The implementation no longer assumes that every valid frame begins only with `0xC8`.
-
-`CrsfParser` validates frame-start bytes against known CRSF serial/device address values defined in `crsf_protocol.h`.
-
-Important CRSF addresses currently represented include:
-
-```text
-0x00 Broadcast
-0x10 USB Device
-0xC8 Flight Controller / traditional serial sync
-0xEA Remote Control
-0xEC Receiver
-0xEE Transmitter
-```
-
-The official CRSF specification permits the serial sync byte, broadcast address, or a device address to appear as the first byte of a received frame.
-
----
-
-## 5. CRC
-
-Polynomial:
-
-```text
-0xD5
-```
-
-The normal CRSF frame CRC covers bytes beginning at Type and ending at the final payload byte.
-
-Therefore:
-
-```text
-Broadcast CRC input:
-Type + Payload
-
-Extended-frame CRC input:
-Type + Destination + Origin + Payload
-```
-
-Sync/Address and Length are excluded from the CRC calculation.
-
----
-
-## 6. RC Channels (`0x16`)
-
-Payload size:
-
-```text
-22 bytes
-```
-
-Encoding:
-
-- 16 channels
-- 11 bits per channel
-- packed consecutively
-- explicit unpacking in firmware
-
-Reference CRSF values commonly used by the project:
-
-| Value | Meaning |
-|---:|---|
-| 172 | Minimum |
-| 992 | Center |
-| 1811 | Maximum |
-
-The firmware does not use compiler-dependent packed C/C++ bitfields for this payload.
-
-### Processing path
-
-```text
-CrsfParser
-    |
-CrsfDispatcher
-    |
-RcChannelDecoder
-    |
-RawChannels
-    |
-ChannelNormalizer
-    |
-NormalizedChannels
-    |
-ChannelMapper
-    |
-ChannelState
-    |
-UsbHid
-```
-
-Receipt of a valid `0x16` frame is the primary fact used to maintain RC-active state.
-
----
-
-## 7. Link Statistics (`0x14`)
-
-Link Statistics are decoded for diagnostics such as Link Quality, RSSI, and SNR.
-
-Architecture rule:
+Valid `0x16` RC Channels frames are authoritative for RC-active state.
 
 ```text
 Link Statistics received != RC control healthy
 ```
 
-The RP2 has been observed continuing to emit `0x14` after valid RC Channels frames stopped during transmitter loss.
+The RP2 may continue emitting `0x14` after RC frames stop. Link Statistics therefore cannot reset or override the RC timeout/failsafe state.
 
-Therefore Link Statistics cannot reset or override the RC timeout/failsafe state.
+## 4. Device Identity
 
----
-
-## 8. Device Ping (`0x28`)
-
-`0x28` is an extended-header frame.
-
-Routing fields:
+Reference CRSF identity:
 
 ```text
-Destination
-Origin
+Local address   0xC8  Flight Controller
+Device name     ELRS-HID-Bridge
+Serial Number   0x45484231 ("EHB1")
+Hardware ID     0x51545059 ("QTPY")
+Firmware ID     derived from firmware_version.h
 ```
 
-The official CRSF Device Ping has no defined application payload.
+Device Ping / Device Info routing has been hardware validated through RP2 -> ELRS RF -> Ranger -> EdgeTX.
 
-The current `CrsfDevice` handler requires at least Destination and Origin and tolerates additional trailing bytes for compatibility/protocol investigation.
+## 5. Parameter Service
 
-A ping may target:
+The device now exposes a real parameter tree through standard CRSF device mechanisms.
 
-- `0x00` Broadcast, or
-- one specific CRSF device address.
-
-Current production behavior:
+Current root order:
 
 ```text
-Device Ping recognized
-    ->
-routing retained
-    ->
-builder accepts only broadcast or local-address traffic
-    ->
-Device Info constructed
-    ->
-CrsfUart::write() sends one response attempt
-    ->
-ping cleared
+LED Brightness
+Pitch Inversion
+Throttle Invert
+Roll Inversion
+Yaw Inversion
+Aux 1 Inversion
+Aux 2 Inversion
+Aux 3 Inversion
+Aux 4 Inversion
+Diagnostics
+Restore Defaults
 ```
 
----
-
-## 9. Device Info (`0x29`)
-
-The official Device Info payload is:
+Diagnostics currently contains:
 
 ```text
-char[]   Device_name             // null-terminated
-uint32_t Serial_number
-uint32_t Hardware_ID
-uint32_t Firmware_ID
-uint8_t  Parameters_total
-uint8_t  Parameter_version_number
+Failsafe Count
 ```
 
-CRSF uses big-endian byte ordering for multi-byte values.
+Parameter writes update canonical `BridgeConfiguration` and persistent storage where appropriate.
 
-### Current implementation checkpoint
+Restore Defaults returns the bridge to canonical reference defaults.
 
-`CrsfDevice::buildDeviceInfoResponse()` constructs the complete extended Device Info frame. The production loop now calls the builder for received Device Ping traffic and passes successful responses to `CrsfUart::write()`.
+## 6. Parameter Name Compatibility
 
-Inputs:
-
-- recognized `CrsfDevicePing`
-- caller-supplied local CRSF device address
-- caller-supplied `CrsfDeviceIdentity`
-- caller output buffer/capacity
-
-Current response policy:
+Hardware troubleshooting established an empirical compatibility boundary on the validated EdgeTX/ExpressLRS path:
 
 ```text
-if ping destination == Broadcast
-    respond
-else if ping destination == local device address
-    respond
-else
-    do not construct a response
+15 characters -> works
+16 characters -> works
+17 characters -> enumeration stalls
+18 characters -> enumeration stalls
 ```
 
-Response routing:
+The original `Throttle Inversion` label is 18 characters and reproduced the failure. The production label is `Throttle Invert` (15 characters).
+
+**Project protocol rule:** keep user-visible CRSF parameter names at 16 characters or fewer unless longer names are explicitly revalidated against a future upstream stack.
+
+This is treated as a compatibility constraint even though the upstream limitation has not been formally characterized by this project.
+
+Do not test parameter enumeration by deliberately violating registry/count invariants; startup self-tests correctly reject malformed registries before normal boot.
+
+## 7. Throttle Inversion Finding
+
+A disposable diagnostic forced:
+
+```cpp
+configuration.throttle.inverted = true;
+```
+
+after configuration load.
+
+Throttle then visibly inverted in Windows `joy.cpl`.
+
+This proved the runtime path is healthy:
 
 ```text
-Destination = ping Origin
-Origin      = local device address
+CRSF CH3
+ -> normalization
+ -> ChannelMapper
+ -> ChannelState
+ -> HID Slider 1
 ```
 
-Frame construction:
+The prior failure was therefore in CRSF parameter presentation/compatibility, not throttle normalization or HID mapping.
+
+Failsafe semantics remain independent: throttle failsafe is always safe minimum.
+
+## 8. Receiver Bind Command
+
+Receiver Bind is implemented through CRSF `COMMAND` (`0x32`).
+
+Validated ExpressLRS receiver command:
 
 ```text
-Sync = 0xC8 serial sync
-Type = 0x29 Device Info
-Destination = ping origin
-Origin = caller-supplied local address
-Payload = Device Info fields
-CRC = DVB-S2 CRSF CRC over Type through payload
+Destination  0xEC  Receiver
+Origin       0xC8  Flight Controller
+Realm        0x10  Receiver command
+Subcommand   0x01  Bind
 ```
 
-### Current live discovery identity
+The bridge constructs this through the receiver-command abstraction rather than hard-coding a complete frame in application logic.
 
-The reference implementation uses:
+Receiver-side handling requires ExpressLRS 3.4.0+ and is hardware validated on RadioMaster RP2 / ExpressLRS 3.4.3.
 
-```text
-Local CRSF address  0xC8  Flight Controller
-Device name         ELRS-HID-Bridge
-Serial Number       0x45484231  ("EHB1" project-family ID)
-Hardware ID         0x51545059  ("QTPY" reference hardware)
-Firmware ID         0x01000000  (firmware 1.0.0 tuple)
-Parameters total    0
-Parameter version   0
-```
+## 9. Unsupported Maintenance Commands
 
-`0xC8` is retained because the bridge occupies the flight-controller side of the RP2 UART and that routing has been validated on the reference RP2/Ranger/EdgeTX path. `EHB1` and `QTPY` are deterministic project-defined identifiers rather than globally assigned IDs; the Serial Number field is not a per-unit unique serial number.
+### Wi-Fi
 
-The firmware ID is derived from `firmware_version.h` using `major << 24 | minor << 16 | patch << 8`, with the low byte reserved. The current `1.0.0-rc1` tree therefore reports `0x01000000`; the `-rc1` label is not encoded in the numeric CRSF field. Final `1.0.0` will intentionally report the same CRSF Firmware ID.
+ExpressLRS 3.4.3 contains an ELRS-specific MSP/RF Wi-Fi control path, but no equivalent supported FC-facing CRSF UART command was identified.
 
-Identity values remain isolated in `bridge_identity.h`, while firmware version is centralized in `firmware_version.h`. The generic construction layer still accepts caller-supplied address/identity data, so project policy remains separate from CRSF encoding mechanics.
+The bridge must not guess or spoof one.
 
-CRSF device identity is intentionally aligned with the host-facing USB product identity: both use `ELRS-HID-Bridge`. USB manufacturer/HID descriptor details are host-presentation metadata and are not part of the CRSF protocol.
+### Receiver factory reset
 
-Hardware validation result:
+No supported FC-facing CRSF UART receiver factory-reset command was identified.
 
-```text
-RP2 -> ELRS RF -> Ranger -> EdgeTX
-                      |
-                      v
-          ELRS-HID-Bridge appears
-              under Other Devices
-```
+The bridge does not implement one.
 
-Normal 333 Hz Full RC-to-HID behavior and Liftoff performance remained unchanged with the live Device Info response path enabled.
+## 10. Future Bootloader / Passthrough Work
 
----
+A legitimate receiver bootloader transition has been identified as a possible foundation for a future complete firmware-update feature.
 
-## 10. Device Info Self-Test Coverage
+That feature is intentionally deferred until the USB serial/passthrough and recovery workflow is designed and validated.
 
-Startup tests now verify:
+Bootloader entry by itself is not considered a complete user feature.
 
-- known valid Device Ping recognition
-- extra Device Ping trailing-byte tolerance
-- rejection of malformed Device Ping lacking routing fields
-- non-Ping frames are not surfaced as Device Ping
-- broadcast ping -> Device Info construction
-- directly addressed ping -> Device Info construction
-- unrelated destination -> no response construction
-- response Destination = ping Origin
-- response Origin = local address
-- null-terminated `Device_name`
-- big-endian 32-bit identity fields
-- parameter count/version placement
-- CRSF Length field
-- CRSF CRC
+## 11. Protocol Safety Rules
 
-These tests are deterministic and do not transmit on the live UART.
-
----
-
-## 11. Outbound Extended-Frame Encoder
-
-`CrsfFrameEncoder` owns generic extended-header frame construction.
-
-It receives:
-
-- sync/address byte
-- frame type
-- destination
-- origin
-- payload pointer/length
-- output buffer/capacity
-
-It validates frame sizing/capacity, writes the extended header, copies the payload, computes CRC, and returns the complete frame length.
-
-`CrsfDevice` uses this encoder rather than implementing a second frame/CRC path.
-
----
-
-## 12. Current Bidirectional Boundary
-
-The reference wiring includes both UART directions:
-
-```text
-RP2 TX -> QT Py RX
-RP2 RX <- QT Py TX
-```
-
-`CrsfUart` provides both receive and transmit primitives.
-
-The production firmware now uses the transmit primitive for exactly one purpose: reply to an eligible Device Ping with the already self-tested Device Info frame.
-
-No parameter entries, writes, commands, telemetry sensors, Bind/Wi-Fi commands, or other outbound CRSF behavior are enabled by this checkpoint.
-
-This boundary is hardware validated: the RP2/Ranger/EdgeTX path carries the response and EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**. No additional outbound CRSF feature is required for v1.0.
-
----
-
-## 13. ExpressLRS Channel-Resolution Observation
-
-Reference testing moved from 250 Hz Wide to:
-
-```text
-333 Hz Full
-16ch Rate/2
-```
-
-This allowed CH13 and CH14 to behave proportionally.
-
-With the tested ExpressLRS 3.3.1 receiver firmware, CH15/CH16 remained high. Diagnostic remapping showed this follows the CRSF channels rather than HID axes.
-
-No protocol/HID workaround is currently implemented.
-
----
-
-## 14. Protocol State vs Application State
-
-CRSF decoders provide protocol facts.
-
-`BridgeState` and higher-level application code determine operational state.
-
-Examples:
-
-```text
-valid 0x16 received
-    -> RC frame fact
-    -> refresh RC-active timeout
-
-valid 0x14 received
-    -> Link Statistics fact
-    -> update diagnostics only
-
-0x16 absent for 500 ms
-    -> receiver timeout
-    -> FailsafePolicy applied
-    -> throttle minimum
-    -> roll/pitch/yaw centered
-    -> AUX Analog 1-4 centered
-    -> all buttons released
-```
-
-The complete failsafe output policy is covered by a deterministic startup self-test. This separation is a core safety/maintainability rule.
-
----
-
-## 15. Planned Protocol Work
-
-v1.0 release-candidate protocol scope:
-
-- identity-only Device Ping -> Device Info discovery is complete and hardware validated,
-- no additional CRSF feature work is required for v1.0,
-- keep the successful discovery path stable while release-candidate validation proceeds,
-- keep identity/version constants sourced from `bridge_identity.h` and `firmware_version.h`; no further CRSF identity work is required for v1.0.
-
-Post-v1.0 candidates:
-
-- CRSF parameter entries (`0x2B`)
-- parameter reads (`0x2C`)
-- parameter writes (`0x2D`)
-- commands (`0x32`) where justified
-- bridge health information
-- persistent configuration integration
-
-Identity-only discovery is proven. Keep the full parameter system post-v1.0 unless a new release-blocking requirement emerges.
+- RC health derives from valid RC frames.
+- Parameter/maintenance traffic cannot restore RC health.
+- Parameter registry invariants are startup-tested.
+- User-visible parameter names remain <=16 characters unless revalidated.
+- Unsupported receiver commands are not invented.
+- Optional outbound CRSF behavior must not starve HID reporting.
+- Failsafe policy remains independent of live inversion settings.

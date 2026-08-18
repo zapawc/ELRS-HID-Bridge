@@ -1,578 +1,271 @@
 # ELRS HID Bridge Roadmap
 
-**Status:** v1.0.0-rc1 preparation and validation  
+**Status:** post-v1.0 feature freeze / next feature release preparation  
 **Updated:** August 2026
 
 ## 1. Project Direction
 
-ELRS-HID-Bridge is a two-component, open-source CRSF-to-USB HID bridge.
-
-The reference application is a wireless USB joystick for FPV simulators, but the codebase is intended to remain a clean starting point for other ELRS/CRSF-to-PC projects.
+ELRS-HID-Bridge is a minimal, open-source CRSF-to-USB HID bridge and reusable development foundation.
 
 Reference hardware:
 
 ```text
-RadioMaster RP2
-        +
-Adafruit QT Py RP2040
+RadioMaster RP2 + Adafruit QT Py RP2040
 ```
 
-No additional display, pushbutton, companion application, custom USB driver, or custom PCB is required for the reference build.
+The project favors standard HID, standard CRSF mechanisms, transmitter-side configuration, deterministic failsafe behavior, and minimal hardware.
 
----
+## 2. Stable Baseline — v1.0.0
 
-## 2. Release Philosophy
+`v1.0.0` is frozen and released.
 
-Version 1.0 does not need every plausible CRSF or HID capability.
+Completed baseline:
 
-A v1.0 release should mean:
-
-- another builder can reproduce the reference hardware,
-- the joystick path is stable and deterministic,
-- receiver loss is handled safely,
-- automatic recovery works,
-- documentation matches the implementation,
-- the firmware has clean extension boundaries,
-- release artifacts and licensing are in place.
-
-Future features should not delay v1.0 unless they materially affect stability, maintainability, or recoverability.
-
----
-
-## 3. Proven Functional Baseline
-
-Validated on physical hardware:
-
-- 420000-baud CRSF UART to RadioMaster RP2
-- live CRSF frame reception
-- CRC validation and stream recovery
-- explicit decoding of all sixteen packed 11-bit RC channels
-- Link Statistics (`0x14`) decoding
-- USB HID joystick enumeration under Windows
-- Liftoff operation with no USB tether to the transmitter
-- eight conventional DirectInput analog axes
-- 32-button HID capacity
-- mapped 2-position, 3-position, and momentary transmitter switches
-- deterministic RC timeout/failsafe
-- automatic recovery after transmitter reconnect
-- RGB status indication
-- BOOT-button input
-- short-press Link Quality diagnostic display
-
-Reference EdgeTX channels:
-
-```text
-CH1  Roll
-CH2  Pitch
-CH3  Throttle
-CH4  Yaw
-CH5  SF
-CH6  SA
-CH7  SB
-CH8  SC
-CH9  SD
-CH10 SE
-CH11 SG
-CH12 SH
-CH13 S1
-CH14 S2
-CH15 side slider
-CH16 side slider
-```
-
-HID analog mapping:
-
-```text
-X        Roll
-Y        Pitch
-Slider 1 Throttle
-Slider 2 Yaw
-Z        AUX Analog 1
-Rx       AUX Analog 2
-Ry       AUX Analog 3
-Rz       AUX Analog 4
-```
-
-Validated orientation:
-
-```text
-Roll     normal
-Pitch    inverted
-Throttle normal
-Yaw      normal
-```
-
-Current failsafe trigger:
-
-```text
-500 ms without a valid RC channel frame
-```
-
-Current documented failsafe:
-
-```text
-Roll         center
-Pitch        center
-Yaw          center
-Throttle     minimum
-AUX Analog 1 center
-AUX Analog 2 center
-AUX Analog 3 center
-AUX Analog 4 center
-Buttons      released
-```
-
-This complete output policy is enforced by `FailsafePolicy` and covered by a deterministic startup self-test.
-
----
-
-## 4. Completed Pre-v1.0 Structural Work
-
-The high-value structural refactor identified earlier is complete.
-
-Completed incrementally with regression checkpoints:
-
-- [x] split CRSF parser and dispatcher
-- [x] generalize frame synchronization/address handling beyond fixed `0xC8`
-- [x] decouple `CrsfUart` from one decoder consumer
-- [x] provide CRSF UART TX primitive
-- [x] introduce `BridgeState`
-- [x] introduce `BridgeConfiguration`
-- [x] make `ChannelMapper` consume configuration
-- [x] separate `BootButton` hardware from maintenance semantics
-- [x] add `MaintenanceController`
-- [x] add `StatusDisplay` arbitration above `StatusLed`
-- [x] extract `FailsafePolicy`
-- [x] add outbound extended-frame encoder
-- [x] add `CrsfDevice` Device Ping recognition
-
-Do not restart or broaden this architecture work unless a demonstrated requirement exposes a specific boundary problem.
-
----
-
-## 5. CRSF Device Discovery
-
-The first bidirectional feature is deliberately limited to identity discovery and is hardware validated.
-
-### Completed
-
-- [x] define Device Ping (`0x28`) and Device Info (`0x29`) frame types
-- [x] recognize Device Ping through the normal parser/dispatcher path
-- [x] retain Device Ping destination/origin routing
-- [x] construct CRSF extended frames with destination/origin/CRC
-- [x] construct Device Info response payloads
-- [x] encode Device Info numeric fields big-endian
-- [x] reject response construction for pings addressed to another device
-- [x] deterministic self-test for broadcast ping response
-- [x] deterministic self-test for directly addressed ping response
-- [x] deterministic self-test for destination/origin reversal
-- [x] deterministic self-test for null-terminated device name
-- [x] deterministic self-test for frame length and CRC
-
-### Live discovery checkpoint
-
-- [x] validate and retain reference address: `0xC8` Flight Controller
-- [x] isolate bridge identity in `bridge_identity.h`
-- [x] wire Device Info construction to the live `CrsfUart::write()` path
-- [x] limit responses to broadcast/direct Device Ping traffic through the tested builder
-- [x] validate RP2/Ranger/EdgeTX routing on hardware
-- [x] confirm EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**
-- [x] confirm 333 Hz Full RC-to-HID remains unaffected with live TX enabled
-- [x] confirm receiver-loss failsafe and reconnect remain unchanged
-
-### Release identity checkpoint
-
-- [x] retain validated reference CRSF address `0xC8`
-- [x] define stable project Serial Number field `0x45484231` (`EHB1`)
-- [x] define stable reference Hardware ID `0x51545059` (`QTPY`)
-- [x] centralize semantic firmware version in `firmware_version.h`
-- [x] derive CRSF Firmware ID from the canonical version source
-- [x] add deterministic version/identity startup self-test
-
-Current release-candidate version is `1.0.0-rc1`; its packed CRSF Firmware ID is `0x01000000`. The prerelease suffix is not encoded, so final `1.0.0` intentionally uses the same numeric CRSF Firmware ID. The CRSF Serial Number is a project-family identifier, not a per-unit unique hardware serial. The reusable Device Info builder still accepts caller-supplied address/identity values.
-
-### Proof-of-concept result
-
-The live Device Ping -> Device Info exchange is proven on the reference RP2/Ranger/EdgeTX path. EdgeTX discovers `ELRS-HID-Bridge` under **Other Devices**, and normal 333 Hz Full/Liftoff operation remains unaffected.
-
-The `0xC8` routing choice and reference identity policy are therefore fixed for v1.0 hardening. Future version changes update the canonical firmware version source rather than CRSF protocol code.
-
-### Scope stop
-
-Identity-only discovery succeeded, so CRSF feature expansion stops for the v1.0 cycle.
-
-Do **not** immediately add:
-
-- parameter tree,
-- persistent configuration,
-- Bind command,
-- Wi-Fi command,
-- telemetry sensors,
-- desktop configuration software.
-
-The discovery proof-of-concept is valuable because it validates the bidirectional foundation; a complete configuration system is not required for v1.0.
-
----
-
-## 6. v1.0 Functional Completion
-
-### Required / release blocking
-
-- [x] stable CRSF-to-HID control path on reference hardware
-- [x] deterministic receiver-loss timeout behavior
-- [x] automatic reconnection
-- [x] 8-axis HID profile implemented
-- [x] switch/button mapping implemented
-- [x] startup protocol/failsafe self-tests
-- [x] RGB state behavior implemented
-- [x] explicitly define/test AUX analog failsafe behavior
-- [ ] final wiring guide validation
-- [ ] final EdgeTX setup guide validation
-- [x] capture and pin release-critical Arduino-Pico/toolchain/NeoPixel dependency versions
-- [ ] clean `1.0.0-rc1` build from the documented `pico` environment
-- [ ] tested/staged release-candidate UF2 + SHA-256 manifest
-- [x] GPL-3.0-only license selected and added
-- [x] canonical firmware version source and CRSF Firmware ID encoding
-- [x] validate project-controlled USB descriptors on Windows (`BusReported = ELRS-HID-Bridge`)
-- [x] decide v1.0 USB identity policy: retain inherited `0x2E8A:0x000A`; document `joy.cpl` naming limitation
-- [x] tag/GitHub Release procedure documented
-- [x] release-asset staging procedure documented
-- [x] README/Architecture/Protocol/Roadmap/Release synchronized for `1.0.0-rc1`
-- [ ] complete `docs/Release-Checklist.md` on the exact candidate commit
-- [ ] publish/observe RC as needed before final `1.0.0`
-- [ ] final `1.0.0` rebuild, regression, tag, and release
-
-### Current next release gates
-
-1. Build and flash `1.0.0-rc1` using the pinned normal `pico` environment.
-2. Run the complete `docs/Release-Checklist.md`, including wiring and EdgeTX setup validation from a clean-reader perspective.
-3. Stage the tested UF2/hash/manifest using `tools/Stage-Release.ps1` and verify it corresponds to the exact tested commit.
-4. Tag/publish `v1.0.0-rc1` as a pre-release if desired for observation, then close any release blockers before the final `1.0.0` transition.
-
-Windows descriptor validation is complete: both the USB parent and HID interface report `ELRS-HID-Bridge`, while `joy.cpl` still displays `Pico` with the inherited `0x2E8A:0x000A` VID/PID. This is now an identity-allocation decision rather than a product-string defect.
-
-`docs/Release.md` tracks these gates and the version transition rules.
-
-### Strongly preferred
-
+- [x] robust CRSF parsing/CRC/stream recovery
+- [x] 16-channel RC decode
+- [x] Link Statistics decode
+- [x] eight-axis USB HID
+- [x] 32-button HID capacity
+- [x] reference switch mapping
+- [x] deterministic 500 ms failsafe
+- [x] automatic reconnect
+- [x] RGB status
+- [x] BOOT diagnostic UI
 - [x] parser/dispatcher architecture
-- [x] generalized CRSF synchronization
-- [x] TX-capable CRSF transport
-- [x] `BridgeState`
-- [x] `BridgeConfiguration`
-- [x] maintenance UI/controller separation
-- [x] LED display arbitration
-- [x] separated failsafe policy
-- [x] documented Link Statistics diagnostics
-- [ ] basic diagnostic/error counters where useful
-- [ ] enclosure/reference enclosure documentation
+- [x] bidirectional CRSF UART
+- [x] Device Ping / Device Info discovery
+- [x] canonical firmware identity/version
+- [x] GPL-3.0-only release
+- [x] release/checksum/manifest workflow
+- [x] Liftoff hardware validation
 
-### Not required for v1.0
+## 3. Post-v1.0 Feature Cycle — Implemented
 
-- full CRSF parameter configuration
-- persistent configuration
-- desktop configuration utility
-- receiver Bind/Wi-Fi command execution
-- keyboard/media HID
-- generic PC gateway
-- additional RC receiver protocols
-- OLED/display hardware
-- SD-card logging
-- Bluetooth
-- RP2040-side Wi-Fi
-- custom PCB
+### CRSF / EdgeTX configuration
 
----
+- [x] parameter registry/service
+- [x] parameter read/write
+- [x] LED Brightness
+- [x] Pitch Inversion
+- [x] Throttle Invert
+- [x] Roll Inversion
+- [x] Yaw Inversion
+- [x] Aux 1-4 Inversion
+- [x] Diagnostics folder
+- [x] Failsafe Count
+- [x] Restore Defaults
 
-## 7. BOOT Button and Local Recovery
+### Persistent configuration
 
-Current UI behavior:
+- [x] persistent `BridgeConfiguration`
+- [x] schema/version handling
+- [x] validation
+- [x] safe defaults
+- [x] incompatible/corrupt fallback
+- [x] migration behavior
+- [x] persistent inversion settings
+- [x] persistent LED brightness
 
-```text
-short click
-    -> acknowledge press
-    -> display current diagnostic state
-    -> return to normal status
+### Receiver maintenance
 
-~2 s hold
-    -> Bind candidate
-    -> release requests Bind action
+- [x] repeating 2-second BOOT state machine
+- [x] execute-on-release safety
+- [x] short-press Link Quality diagnostic
+- [x] receiver Bind
+- [x] No Action / Cancel
+- [x] ExpressLRS 3.4+ compatibility requirement identified
+- [x] Bind hardware validated on RP2 / ExpressLRS 3.4.3
 
-~5 s hold
-    -> Wi-Fi candidate
-    -> release requests Wi-Fi action
+Wi-Fi and receiver factory reset were investigated and intentionally removed because no supported FC-facing CRSF UART command was identified for those operations.
 
-continue holding
-    -> Cancel candidate
-    -> release with no maintenance action
-```
+### Throttle investigation
 
-Current status:
+- [x] prove runtime throttle inversion path independently
+- [x] isolate Lua enumeration failure from throttle mapping
+- [x] identify parameter-name length as root cause
+- [x] validate 16-character names
+- [x] reproduce failure at 17+ characters
+- [x] adopt production label `Throttle Invert`
+- [x] add startup regression coverage
+- [x] hardware validate inversion, persistence, defaults, failsafe, reconnect
 
-- physical button handling: implemented
-- maintenance selection semantics: implemented
-- LED arbitration: implemented
-- diagnostic short press: implemented
-- Bind request: reserved/no receiver command sent
-- Wi-Fi request: reserved/no receiver command sent
+## 4. Current Compatibility Rule
 
-Before Bind/Wi-Fi can be advertised as supported:
+User-visible CRSF parameter names must remain **16 characters or fewer** unless longer names are explicitly revalidated against the target EdgeTX/ExpressLRS stack.
 
-- verify the receiver-side command mechanism on the RP2 UART path,
-- verify across intended ExpressLRS firmware versions,
-- confirm maintenance actions cannot interfere with HID,
-- confirm accidental short presses cannot enter maintenance actions.
+This rule is based on hardware testing in which 17- and 18-character parameter names stalled device-menu enumeration.
 
----
+## 5. Current Hardware Validation
 
-## 8. Post-v1.0: CRSF Device Configuration
-
-Target experience:
+Reference configuration:
 
 ```text
-plug bridge into PC
-      |
-ELRS connects
-      |
-open CRSF device configuration on transmitter
-      |
-select ELRS-HID-Bridge
-      |
-change settings
-      |
-bridge validates/saves configuration
+333 Hz Full
+16ch Rate/2
 ```
 
-Potential parameters:
+RadioMaster RP2 with ExpressLRS 3.4.3:
 
-- axis source channel
-- axis inversion
-- switch type
-- HID button assignments
-- failsafe timeout/behavior
-- LED brightness/behavior
-- calibration
-- HID profile
-- diagnostic options
-- restore defaults
-- reboot
+- [x] CH13 proportional
+- [x] CH14 proportional
+- [x] CH15 proportional
+- [x] CH16 proportional
+- [x] receiver Bind command
 
-Architectural prerequisites already completed:
+Receiver-side BOOT Bind requires ExpressLRS 3.4.0+.
 
-- generic parser
-- frame dispatcher
-- bidirectional `CrsfUart`
-- outbound frame encoder
-- CRSF device handler
-- canonical `BridgeConfiguration`
+## 6. Immediate Release Plan
 
-Still required for a real parameter system:
+Feature coding for this cycle is complete.
 
-- parameter model/service
-- persistent configuration format
-- schema versioning
-- validation/default fallback
-- parameter read/write handling
+### Release blocking
 
-Do not build these until identity discovery is proven and v1.0 scope is secure.
+- [ ] synchronize README / Architecture / Roadmap / Protocol / maintenance docs
+- [ ] commit documentation synchronization
+- [ ] normal `pico` build
+- [ ] VS Code Problems clear
+- [ ] verify USB HID enumeration
+- [ ] verify all eight analog axes
+- [ ] verify buttons
+- [ ] verify every inversion control
+- [ ] verify persistence across reboot
+- [ ] verify Restore Defaults
+- [ ] verify transmitter-off failsafe
+- [ ] verify reconnect
+- [ ] verify Diagnostics / Failsafe Count
+- [ ] verify BOOT short diagnostic
+- [ ] verify BOOT Bind
+- [ ] verify BOOT No Action
+- [ ] verify EdgeTX menu enumeration
+- [ ] Liftoff smoke test
+- [ ] choose next feature-release version
+- [ ] update version/release metadata
+- [ ] stage UF2 / checksum / manifest
+- [ ] publish and verify GitHub release
 
----
+No new runtime feature should be added before these gates are complete.
 
-## 9. Post-v1.0: Persistent Configuration
+## 7. Pocketed Future Feature — Receiver Firmware Update
 
-Persistent configuration should use `BridgeConfiguration` directly.
+A future **Receiver Firmware Update / USB Serial Passthrough** feature is considered useful and feasible enough to retain on the roadmap.
 
-Requirements:
+Potential user flow:
 
-- schema/version identifier
-- validation
-- safe defaults
-- corrupt/incompatible fallback
-- deliberate flash writes
-- migration strategy
-- hardware recovery path
+```text
+future blinking-red maintenance selection
+    -> receiver bootloader
+    -> QT Py dedicated USB serial/passthrough mode
+    -> ExpressLRS flashing tool
+    -> receiver firmware update
+```
 
-Factory defaults must always produce a usable reference joystick configuration.
+Required architecture/research before implementation:
 
----
+- [ ] confirm ExpressLRS Configurator direct-UART behavior
+- [ ] determine USB CDC compatibility requirements
+- [ ] determine baud-rate transitions
+- [ ] determine DTR/RTS requirements
+- [ ] validate receiver bootloader transition
+- [ ] design buffering/flow control
+- [ ] design interrupted-flash recovery
+- [ ] design USB re-enumeration
+- [ ] define safe update-mode exit behavior
+- [ ] preserve normal HID release personality
 
-## 10. Post-v1.0: Bridge Health Telemetry
+Do not expose a red bootloader action until the complete update/recovery workflow is usable.
 
-Potential bridge-originated information:
+## 8. Future Telemetry
 
-- firmware version
-- USB/HID ready state
-- RC stream active
-- Link Quality
-- RSSI
-- SNR
-- parser/CRC errors
-- receiver timeout/failsafe count
-- uptime
-- reset reason
-- HID/report statistics
+Telemetry remains deliberately unconsumed by bridge bookkeeping.
 
-Telemetry is informational and must never override primary RC-derived state or failsafe logic.
+Potential future direction:
 
----
+```text
+PC / simulator telemetry
+    -> bridge
+    -> semantically correct CRSF telemetry
+    -> ELRS
+    -> EdgeTX
+```
 
-## 11. Future USB Expansion
+Only implement telemetry when a real data source/use case exists.
 
-Potential optional profiles:
+## 9. CRSFJoystick Parity / Compatibility Workstream
 
-- composite HID + CDC serial
-- alternate HID joystick profiles
-- keyboard/media HID
-- structured diagnostics interface
+Maintain an explicit compatibility comparison without cloning features for their own sake.
 
-The standard joystick must remain the simplest/default user experience.
+Future work:
 
-No proprietary driver should be required for ordinary use.
+- [ ] community Crossfire hardware validation
+- [ ] community Tracer hardware validation
+- [ ] document tested/expected RF systems
+- [ ] publish enclosure/build assets
+- [ ] publish concise BOM/wiring/build guide
+- [ ] consider additional RP2040 targets only when demand justifies them
 
----
+Crossfire/Tracer hardware purchases are not required from the primary maintainer.
 
-## 12. Future PC/ELRS Gateway
+## 10. Physical Build
 
-Possible optional applications:
+A compact `.step` enclosure design now exists for the QT Py + receiver reference build.
 
-- OBS/DVR state/control
-- race timer state
-- lap/event notification
-- race-station controls
-- PC automation driven by AUX switches
-- timestamped pilot-input logging
-- link-quality logging
-- application-state feedback to EdgeTX
+Key design characteristic:
 
-These belong above the stable CRSF/HID foundation and should not be mixed into core configuration semantics.
+- integrated flexible arm actuates the onboard BOOT button
 
----
+Future publication work:
 
-## 13. Fork/Community Expansion Ideas
+- [ ] review/finalize enclosure
+- [ ] add printable/exported formats as appropriate
+- [ ] document assembly
+- [ ] document BOOT flex-arm operation
+- [ ] include enclosure in a future release/build guide
 
-Good fork/optional-module candidates:
+A custom PCB remains optional and is not required for product completeness.
 
-- keyboard/media controller
-- OBS-specific integration
-- race-station controller
-- pilot-input "black box"
-- link-quality logger
-- alternate RP2040 boards
-- optional STEMMA QT display
-- sensors
-- custom enclosures/carrier boards
-- specialized HID profiles
+## 11. Explicit Non-Goals
 
-The repository should make these projects easy without requiring upstream to implement each one.
-
----
-
-## 14. Explicit Non-Goals for the Current Core
-
-Do not pursue these merely for feature completeness:
+Do not pursue merely for feature completeness:
 
 - generic SBUS/iBUS/PPM support
-- mandatory OLED
+- mandatory OLED/display
 - mandatory external button
 - mandatory custom PCB
-- mandatory desktop software
-- RP2040-side Bluetooth/Wi-Fi
-- RTOS conversion
-- multicore use without demonstrated need
-- dynamic plugin architecture
+- mandatory desktop configuration software
+- arbitrary diagnostic counters
+- fake Wi-Fi/reset CRSF commands
+- RTOS/multicore conversion without demonstrated need
 - application-specific integrations in the critical HID path
 
----
+## 12. Development Workflow
 
-## 15. Testing and Release Workflow
-
-Preferred workflow:
+Preferred sequence:
 
 ```text
-known-good Git commit
-      |
-one structural/functional change
-      |
-compile
-      |
-deterministic/startup tests
-      |
-bench hardware test
-      |
-Windows joy.cpl validation
-      |
-Liftoff test when control path changed
-      |
-commit/tag checkpoint
+inspect live repository
+    -> one coherent change
+    -> complete-file ZIP overlay
+    -> build
+    -> deterministic/self-tests
+    -> hardware test
+    -> joy.cpl / EdgeTX validation
+    -> Liftoff when control path changes
+    -> commit
+    -> sync/push
+    -> verify GitHub
 ```
 
-### Control-path regression checklist
+The normal `pico` environment is authoritative for release builds. Hardware behavior is authoritative for release-critical validation.
 
-- device enumerates as expected
-- USB bus-reported identity is `ELRS-HID-Bridge`; inherited VID/PID and any `joy.cpl` `Pico` label are documented before changing firmware identity
-- Roll direction/range correct
-- Pitch direction/range correct
-- Throttle direction/range correct
-- Yaw direction/range correct
-- AUX analog axes behave as expected
-- all four AUX analog axes center on receiver-loss failsafe
-- switch mappings remain correct
-- transmitter-off causes failsafe within expected timeout
-- no stale button state remains after failsafe
-- reconnect restores live control without bridge reboot
-- LED follows documented state
-- Link Statistics cannot falsely restore healthy RC state
+## 13. Next Architecture Review
 
-### Parser/CRSF regression checklist
+After the current release is published, generate a new handoff and return to architecture/roadmap review before starting the next feature version.
 
-- valid `0x16` frames decode
-- valid `0x14` frames decode
-- CRC failures are rejected
-- partial/malformed stream recovers
-- startup self-tests pass
-- frame/transport counters remain sane where implemented
-- UART traffic does not starve HID reporting
+Likely discussion candidates:
 
-### Bidirectional CRSF regression checklist
+1. Receiver Firmware Update / USB Serial Passthrough
+2. enclosure/build publication
+3. community Crossfire/Tracer validation
+4. genuine simulator/PC telemetry forwarding
 
-With live Device Info TX enabled:
-
-- only intended requests generate responses
-- destination/origin values match observed routing requirements
-- response CRC/length remain correct
-- response traffic does not corrupt inbound parsing
-- 333 Hz Full control remains stable
-- failsafe/reconnect remain stable
-- EdgeTX behavior is documented from observation, not assumption
-
----
-
-## 16. Documentation Before Public v1.0 Announcement
-
-Keep these synchronized at every meaningful checkpoint:
-
-- `README.md`
-- `CHANGELOG.md`
-- `docs/Architecture.md`
-- `docs/Protocol.md`
-- `docs/Roadmap.md`
-- `docs/Release.md`
-- `docs/Release-Checklist.md`
-
-Before broader public announcement, also validate/document:
-
-- supported/reference hardware
-- exact wiring
-- tested ExpressLRS/EdgeTX configuration
-- current CH15/CH16 limitation
-- exact failsafe behavior including AUX axes
-- build/flash workflow and release UF2 artifact
-- Windows validation
-- simulator validation
-- current Device Ping/Device Info status
-- release-candidate checklist and checksum/manifest procedure
-- known limitations
-- bug-report guidance
-- contribution/fork guidance
-- prior art/acknowledgements
-- project GPL-3.0-only license and third-party notices
+The next version should be scoped deliberately rather than accumulating features simply because the platform can support them.
