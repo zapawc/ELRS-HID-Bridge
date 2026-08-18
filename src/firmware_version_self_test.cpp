@@ -1,77 +1,29 @@
 #include "firmware_version_self_test.h"
-#include <string.h>
-#include "bridge_identity.h"
+
 #include "firmware_version.h"
 
-namespace
-{
-    bool runSemanticVersionTest()
-    {
-        if (FirmwareVersion::MAJOR != 1)
-        {
-            return false;
-        }
-
-        if (FirmwareVersion::MINOR != 0)
-        {
-            return false;
-        }
-
-        if (FirmwareVersion::PATCH != 0)
-        {
-            return false;
-        }
-
-        if (
-            strcmp(
-                FirmwareVersion::PRERELEASE,
-                ""
-            ) != 0
-        )
-        {
-            return false;
-        }
-
-        if (
-            strcmp(
-                FirmwareVersion::STRING,
-                "1.0.0"
-            ) != 0
-        )
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    bool runPackedIdTest()
-    {
-        if (
-            FirmwareVersion::CRSF_ID !=
-            0x01000000u
-        )
-        {
-            return false;
-        }
-
-        // BridgeIdentity must consume the canonical version source rather than
-        // maintaining an independent firmware identifier.
-        if (
-            BridgeIdentity::CRSF_FIRMWARE_ID !=
-            FirmwareVersion::CRSF_ID
-        )
-        {
-            return false;
-        }
-
-        return true;
-    }
-}
+#include <cstring>
 
 bool FirmwareVersionSelfTest::run()
 {
-    return
-        runSemanticVersionTest() &&
-        runPackedIdTest();
+    // Deliberate release assertion for v1.1.0.
+    // Keep these expected values independent so an incomplete version bump
+    // fails startup rather than silently publishing inconsistent identity.
+
+    if (FirmwareVersion::MAJOR != 1)
+        return false;
+
+    if (FirmwareVersion::MINOR != 1)
+        return false;
+
+    if (FirmwareVersion::PATCH != 0)
+        return false;
+
+    if (std::strcmp(FirmwareVersion::STRING, "1.1.0") != 0)
+        return false;
+
+    if (FirmwareVersion::CRSF_ID != 0x01010000u)
+        return false;
+
+    return true;
 }

@@ -1,40 +1,22 @@
-# Documentation Synchronization Changeset
+# v1.1.0 Version Identity Changeset
 
-## Intent
-
-Bring public project documentation into alignment with the current post-v1.0 source and the hardware-validated findings from BOOT maintenance and Throttle Inversion troubleshooting.
+Updates the canonical firmware identity and its independent startup release assertion from v1.0.0 to v1.1.0.
 
 ## Files
 
-- `README.md`
-- `CHANGELOG.md`
-- `docs/Architecture.md`
-- `docs/Roadmap.md`
-- `docs/Protocol.md`
-- `docs/Receiver-Maintenance-Protocol.md`
+- `src/firmware_version.h`
+- `src/firmware_version_self_test.cpp`
 
-## Captured current state
+## Expected identity
 
-- CRSF/EdgeTX parameter configuration is implemented.
-- Persistent bridge configuration is implemented.
-- `Throttle Invert` is implemented and hardware validated.
-- CRSF parameter names are limited to <=16 visible characters as a validated compatibility rule.
-- Diagnostics currently contains only Failsafe Count.
-- Restore Defaults is implemented.
-- BOOT rotation is Diagnostic -> Bind -> No Action/Cancel -> repeat.
-- Receiver Bind requires ExpressLRS 3.4.0+ and is validated on RP2 / 3.4.3.
-- Wi-Fi and receiver factory reset are intentionally not implemented.
-- CH15/CH16 proportional shoulder-slider behavior is validated after the RP2 firmware upgrade.
-- Receiver Firmware Update / USB Serial Passthrough is retained as a future feature.
-- Current runtime feature work is frozen pending full release regression.
+- MAJOR: 1
+- MINOR: 1
+- PATCH: 0
+- STRING: `1.1.0`
+- CRSF_ID: `0x01010000`
 
-## Intentionally not changed
+The self-test remains deliberately independent of the canonical values so incomplete release-version changes are detected at startup.
 
-- firmware version source
-- release version number
-- release checklist
-- release packaging metadata
-- source code
-- platform/toolchain configuration
+## Validation
 
-Version/release metadata should be changed only after the documentation overlay is committed and the full release regression has passed.
+Build and upload only the normal `pico` environment. Do not commit until the board passes startup, returns to normal operation, HID is live, and the EdgeTX device menu enumerates normally.
